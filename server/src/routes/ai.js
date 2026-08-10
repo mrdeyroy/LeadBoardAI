@@ -24,7 +24,7 @@ router.post(
   '/reply',
   validateBody({
     leadId: leadIdRule,
-    tone: { enum: ['professional', 'casual'], trim: true },
+    tone: { enum: ['short', 'professional', 'friendly'], trim: true },
   }),
   reply
 )

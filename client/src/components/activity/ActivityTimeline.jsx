@@ -3,6 +3,7 @@ import {
   BrainCircuit,
   CalendarClock,
   Plus,
+  Sparkles,
   StickyNote,
   Zap,
 } from 'lucide-react'
@@ -23,13 +24,22 @@ const EMPTY_META = { icon: Zap, tone: 'bg-muted text-muted-foreground' }
 
 function ActivityRow({ activity, showLead }) {
   const { icon: Icon, tone } = ACTIVITY_META[activity.type] ?? EMPTY_META
+  const isAi = activity.type === 'ai_analysis' || activity.type === 'ai_action' || activity.metadata?.actor === 'ai'
   return (
     <li className="flex gap-3">
       <div className={cn('mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full', tone)}>
         <Icon className="size-3.5" />
       </div>
       <div className="min-w-0 flex-1">
-        <p className="text-sm">{activity.message}</p>
+        <p className="text-sm">
+          {activity.message}
+          {isAi && (
+            <span className="ml-2 inline-flex items-center gap-1 rounded bg-cyan-500/10 px-1.5 py-0.5 text-[10px] font-medium text-cyan-600 dark:text-cyan-400">
+              <Sparkles className="size-2.5" />
+              AI
+            </span>
+          )}
+        </p>
         <p className="mt-0.5 text-xs text-muted-foreground">
           {showLead && activity.lead?.name ? `${activity.lead.name} · ` : ''}
           {timeAgo(activity.createdAt)}

@@ -20,6 +20,10 @@ export function setSessionTokenProvider(provider) {
   sessionTokenProvider = provider
 }
 
+export async function getSessionToken() {
+  return sessionTokenProvider ? await sessionTokenProvider() : null
+}
+
 export async function api(path, { method = 'GET', body } = {}) {
   const headers = {}
   if (body !== undefined) headers['Content-Type'] = 'application/json'

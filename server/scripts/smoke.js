@@ -319,6 +319,18 @@ check('analyze without key -> 500', noKeyAnalyze.status === 500 && noKeyAnalyze.
 const noKeyChat = await request('POST', '/ai/chat', { token, body: { leadId, message: 'What should I do next?' } })
 check('chat without key -> 500', noKeyChat.status === 500 && noKeyChat.data.error === 'Gemini API key not configured')
 
+const badChatHistory = await request('POST', '/ai/chat', { token, body: { leadId, message: 'hi', history: 'not-an-array' } })
+check('chat history must be an array -> 400', badChatHistory.status === 400)
+
+const badChatHistoryRole = await request('POST', '/ai/chat', {
+  token,
+  body: { leadId, message: 'hi', history: [{ role: 'system', text: 'sys' }] },
+})
+check('chat history invalid role -> 400', badChatHistoryRole.status === 400)
+
+const badReplyTone = await request('POST', '/ai/reply', { token, body: { leadId, tone: 'shouty' } })
+check('reply invalid tone -> 400', badReplyTone.status === 400)
+
 // ---- Ownership isolation (User A vs User B) ----
 const otherLead = await request('POST', '/leads', {
   token: otherToken,
@@ -370,6 +382,168 @@ check(
 
 const dashOther = await request('GET', '/dashboard', { token: otherToken })
 check('other user dashboard is isolated', dashOther.data.leads.total === 1)
+
+// ---- User Profile & Preferences ----
+const userProfile = await request('GET', '/user/profile', { token })
+check('get user profile -> 200', userProfile.status === 200 && userProfile.data.user.email !== undefined)
+
+const updateProf = await request('PATCH', '/user/profile', {
+  token,
+  body: { phone: '+1234567890', jobTitle: 'Sales Director', companyName: 'Acme Sales', bio: 'CRM Lead' },
+})
+check('update user profile -> 200', updateProf.status === 200 && updateProf.data.user.jobTitle === 'Sales Director')
+
+const updatePref = await request('PATCH', '/user/preferences', {
+  token,
+  body: { itemsPerPage: 50, defaultView: 'cards', theme: 'dark' },
+})
+check('update user preferences -> 200', updatePref.status === 200 && updatePref.data.user.preferences.itemsPerPage === 50)
+
+const badPref = await request('PATCH', '/user/preferences', {
+  token,
+  body: { itemsPerPage: 100 },
+})
+check('invalid preferences -> 400', badPref.status === 400)
+
+// ---- CSV Export & Import ----
+const exportRes = await fetch(base + '/leads/export', {
+  headers: { Authorization: `Bearer ${token}` },
+})
+const csvText = await exportRes.text()
+check('csv export -> 200 with text/csv', exportRes.status === 200 && csvText.includes('Name,Company,Email'))
+
+const importRes = await request('POST', '/leads/import', {
+  token,
+  body: {
+    leads: [
+      { name: 'Imported Lead 1', company: 'Corp 1', status: 'New', source: 'CSV Import' },
+      { name: 'Imported Lead 2', company: 'Corp 2', status: 'Qualified', source: 'Website' },
+      { name: '' }, // invalid, should be skipped
+    ],
+  },
+})
+check('csv import -> 200 with importedCount', importRes.status === 200 && importRes.data.importedCount === 2 && importRes.data.skippedCount === 1)
+
+// ---- Sorting & Source Filtering ----
+const sortedLeads = await request('GET', '/leads?sortBy=name&sortOrder=asc', { token })
+check('leads sorting by name', sortedLeads.status === 200 && sortedLeads.data.leads.length >= 2)
+
+const dashWithSources = await request('GET', '/dashboard', { token })
+check('dashboard sourceCounts included', Array.isArray(dashWithSources.data.sourceCounts) && dashWithSources.data.sourceCounts.length >= 1)
+
+// ---- Follow-up PATCH validation ----
+const patchFupEmptyTitle = await request('PATCH', `/followups/${fupId}`, {
+  token,
+  body: { title: '   ' },
+})
+check('follow-up patch empty title -> 400', patchFupEmptyTitle.status === 400)
+
+const patchFupBadDate = await request('PATCH', `/followups/${fupId}`, {
+  token,
+  body: { dueDate: 'not-a-date' },
+})
+check('follow-up patch bad date -> 400', patchFupBadDate.status === 400)
+
+const patchFupValidTitle = await request('PATCH', `/followups/${fupId}`, {
+  token,
+  body: { title: 'Updated Call Title' },
+})
+check('follow-up patch valid title -> 200', patchFupValidTitle.status === 200 && patchFupValidTitle.data.followUp.title === 'Updated Call Title')
+
+// ---- Follow-up DELETE ----
+const aiFupId = aiFollowUp.data.result.followUpId
+const deleteFupOtherUser = await request('DELETE', `/followups/${aiFupId}`, { token: otherToken })
+check('other user cannot delete our follow-up -> 404', deleteFupOtherUser.status === 404)
+
+const deleteFupOwned = await request('DELETE', `/followups/${aiFupId}`, { token })
+check('delete own follow-up -> 200', deleteFupOwned.status === 200)
+
+const deleteFupGone = await request('GET', '/followups', { token })
+check('deleted follow-up no longer in list', !deleteFupGone.data.followUps.some((f) => f.id === aiFupId))
+
+// ---- Activity type filtering & search ----
+const actsByType = await request('GET', `/leads/${leadId}/activities?type=status_changed`, { token })
+check('activities filter by type=status_changed', actsByType.status === 200 && actsByType.data.activities.every((a) => a.type === 'status_changed'))
+
+const recentActsByType = await request('GET', '/activities?type=lead_created', { token })
+check('recent activities filter by type=lead_created', recentActsByType.status === 200 && recentActsByType.data.activities.length > 0 && recentActsByType.data.activities.every((a) => a.type === 'lead_created'))
+
+const actSearch = await request('GET', '/activities?search=Acme', { token })
+check('recent activities search by message keyword', actSearch.status === 200 && actSearch.data.activities.length > 0 && actSearch.data.activities.every((a) => a.message.toLowerCase().includes('acme')))
+
+const actsNoMatch = await request('GET', '/activities?search=zzznomatchzzz', { token })
+check('activity search with no match returns empty array', actsNoMatch.status === 200 && actsNoMatch.data.activities.length === 0)
+
+// ---- Lead source filter ----
+const sourceFilter = await request('GET', '/leads?source=Website', { token })
+check('lead source filter returns matching leads', sourceFilter.status === 200 && sourceFilter.data.leads.every((l) => l.source?.toLowerCase().includes('website')))
+
+const sourceNoMatch = await request('GET', '/leads?source=NonExistentSource123', { token })
+check('lead source filter with no match returns empty list', sourceNoMatch.status === 200 && sourceNoMatch.data.leads.length === 0)
+
+// ---- Lead pagination ----
+const page1 = await request('GET', '/leads?page=1&limit=2', { token })
+check('lead pagination page 1 limit 2 has correct shape', page1.status === 200 && page1.data.pagination.page === 1 && page1.data.pagination.limit === 2 && page1.data.leads.length <= 2)
+
+const page2 = await request('GET', '/leads?page=2&limit=2', { token })
+check('lead pagination page 2 returns correct page number', page2.status === 200 && page2.data.pagination.page === 2)
+
+const badSortField = await request('GET', '/leads?sortBy=injectedField&sortOrder=asc', { token })
+check('leads invalid sortBy falls back to createdAt', badSortField.status === 200)
+
+// ---- Profile update validation ----
+const profEmptyName = await request('PATCH', '/user/profile', { token, body: { name: '   ' } })
+check('profile update empty name -> 400', profEmptyName.status === 400)
+
+const profValidName = await request('PATCH', '/user/profile', { token, body: { name: 'Demo Smith' } })
+check('profile update valid name -> 200', profValidName.status === 200 && profValidName.data.user.name === 'Demo Smith')
+
+// ---- Preferences validation edge cases ----
+const badView = await request('PATCH', '/user/preferences', { token, body: { defaultView: 'list' } })
+check('preferences bad defaultView -> 400', badView.status === 400)
+
+const badTheme = await request('PATCH', '/user/preferences', { token, body: { theme: 'solarized' } })
+check('preferences bad theme -> 400', badTheme.status === 400)
+
+const goodPrefs = await request('PATCH', '/user/preferences', { token, body: { itemsPerPage: 10, defaultView: 'table', theme: 'light' } })
+check('preferences all valid -> 200', goodPrefs.status === 200 && goodPrefs.data.user.preferences.theme === 'light')
+
+// ---- CSV import edge cases ----
+const importNonArray = await request('POST', '/leads/import', { token, body: { leads: 'not-an-array' } })
+check('csv import non-array body treated as empty -> importedCount 0', importNonArray.status === 200 && importNonArray.data.importedCount === 0)
+
+const importAllInvalid = await request('POST', '/leads/import', {
+  token,
+  body: { leads: [{ name: '' }, { name: '   ' }, null] },
+})
+check('csv import all-invalid rows -> importedCount 0, skippedCount 3', importAllInvalid.status === 200 && importAllInvalid.data.importedCount === 0 && importAllInvalid.data.skippedCount === 3)
+
+// ---- Dashboard sourceCounts shape ----
+const dashShape = await request('GET', '/dashboard', { token })
+check('dashboard sourceCounts items have source and count keys',
+  Array.isArray(dashShape.data.sourceCounts) &&
+  dashShape.data.sourceCounts.every((s) => typeof s.source === 'string' && typeof s.count === 'number'))
+check('dashboard statusCounts covers all statuses', dashShape.data.statusCounts.length >= 5)
+check('dashboard leads.won is a number', typeof dashShape.data.leads.won === 'number')
+
+// ---- AI ownership: chat and reply with unowned lead ----
+const aiChatOther = await request('POST', '/ai/chat', {
+  token: otherToken,
+  body: { leadId, message: 'What should I do next?' },
+})
+check('ai chat for unowned lead -> 404', aiChatOther.status === 404)
+
+const aiReplyOther = await request('POST', '/ai/reply', {
+  token: otherToken,
+  body: { leadId, tone: 'professional' },
+})
+check('ai reply for unowned lead -> 404', aiReplyOther.status === 404)
+
+const aiAnalyzeOther = await request('POST', '/ai/analyze', {
+  token: otherToken,
+  body: { leadId },
+})
+check('ai analyze for unowned lead -> 404', aiAnalyzeOther.status === 404)
 
 // ---- Rate limiting (AI endpoints) ----
 let limited = false

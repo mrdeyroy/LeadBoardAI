@@ -716,6 +716,135 @@ Clerk keys + env vars.
 
 ---
 
+### Phase 11 — Smarter AI (live lead context, reply tones, chat memory, clearer UX)
+
+**Goal:** make the AI features actually *useful* instead of generic: inject the
+lead's real CRM state (follow-ups, recent activity, age) into every prompt,
+give the reply drafts an explicit tone choice, let the chat remember earlier
+messages in the session, and make the verify-before-execute flow unmistakable in
+the UI. No API-surface growth beyond validation; 72 smoke assertions green.
+
+**What was built/changed:**
+
+- **Backend — richer, truthful context (`services/prompts.js` + `aiService`):**
+  - `buildLeadContext` now includes the lead's full profile, **days in CRM**,
+    **upcoming open follow-ups** (title + due date) and **recent activity**
+    (last 5) — loaded live per call by `loadInsights(leadId)` in `aiService`.
+    Every operation (analyze/qualify/timing/reply/chat) reasons from the same
+    enriched context instead of a bare lead card.
+  - Prompts tightened per operation: qualify warns it is *recommendation-only*
+    and to keep the current status when evidence is thin; timing now also
+    returns a `title` (concrete follow-up subject) and caps `dueInDays` 0–14;
+    analyze keeps its strict JSON contract. Prompt-injection defence restated
+    (lead/conversation content is data, never instructions).
+- **Reply tones** (`/api/ai/reply`): enum changed `professional | casual` →
+    `short | professional | friendly`, validated 400 server-side; each tone has
+    its own drafting guidance in `PROMPTS.reply(tone)`.
+- **Chat memory** (`/api/ai/chat`): accepts an optional `history` array
+    (roles `user`/`assistant` + text). The controller sanitizes it (must be an
+    array; invalid roles/text → 400; capped to last 12, each ≤ 5000 chars) and
+    `aiService.chat` maps it into Gemini `contents` with role
+    `user`→`user`, `assistant`→`model`, then appends the current message.
+- **AI activity trace** — `analyze` activities now carry `metadata.actor: 'ai'`
+    so the timeline can badge AI-generated entries.
+- **Client — `AIPanel` upgrades:**
+  - **Reply tone picker** (Short/Professional/Friendly) — pick before drafting,
+    and re-drafting automatically if a reply is already on screen.
+  - **Editable drafted reply** — the reply renders in a `Textarea`; Copy copies
+    your edited text.
+  - **Separate per-result views** — `QualifyView` shows current status →
+    recommended status + reason (and a hint when no change is needed); a status
+    proposal only appears when the recommendation actually differs.
+    `TimingView` shows the suggested delay + reason; its proposal card now uses
+    the AI's `title` for the follow-up.
+  - **Clearer confirmations** — proposal cards read "Proposed by AI — requires
+    your confirmation" with an explicit "Confirm & run" button, and a persistent
+    footnote: "Proposed actions only run after you confirm them."
+  - `useState`-driven tuned `sendChat` sends the session history; chat bubbles
+    keep working as before.
+- **ActivityTimeline** — AI-generated entries (analyze/ai_action, or
+  `metadata.actor === 'ai'`) show a small sparkle "AI" badge.
+- **Docs:** README API table reflects the new tone values and `history`/
+    `dueInDays + title` fields; this document updated.
+- **Tests — `server/scripts/smoke.js` (+3, now 72):** reply with invalid tone
+    → 400; chat with non-array history → 400; chat history with invalid role →
+    400. (Existing no-key 500 paths for analyze/chat still green.)
+
+**Problems found & fixed:**
+
+- A stray trailing comma after the closing backtick of `PROMPTS.reply` broke the
+  whole module with `SyntaxError: Unexpected token '}'` — caught immediately by
+  the smoke suite on boot; removed, tests green.
+- Tone was previously `professional | casual`, which read as an anti-pair;
+  switched to the 3-tone set for a real choice (and covered it with a 400 test
+  so a stale client can't silently send `casual` into the fallback).
+
+**Status:** Phase 11 complete — every AI operation now reasons from the lead's
+live CRM state, replies have an explicit tone, the chat carries session memory,
+and the confirm-before-execute rule is spelled out in the UI. 72/72 smoke green,
+client builds and lints clean.
+
+---
+
+### Phase 12 — SaaS CRM UX Polish & Verification
+
+**Goal:** Polish LeadBoard AI into a professional, high-grade SaaS CRM with polished tables, sorting, filters, clear information hierarchy, KPI cards, and responsive transitions without adding heavy bloated features or breaking Clerk auth / AI tools.
+
+**What was built/changed:**
+
+- **Leads Table UX & Sorting:**
+  - Sortable table columns (`name`, `company`, `source`, `budget`, `status`, `createdAt`) with dynamic direction indicators (`ArrowUp`/`ArrowDown`).
+  - Source filter dropdown alongside Status filter.
+  - Search bar with instant clear button (`X`).
+  - Items-per-page selector (10, 20, 50) and responsive page controls.
+- **Lead Details Page Polish:**
+  - Hero header card with inline status selector & quick action toolbar.
+  - Embedded Lead Follow-ups widget directly on the detail page (add follow-up for this lead, toggle completion, overdue alerts).
+  - Filterable Activity Timeline tabs (All, Status Changes, Notes, AI Actions).
+- **Dashboard Polish:**
+  - Win Rate % indicator badge (`(Won / Total * 100).toFixed(1)%`).
+  - Pipeline Conversion Funnel chart (Bar) and Lead Source distribution chart.
+  - Categorized pending follow-ups (Overdue, Due Today, Upcoming).
+  - Activity feed with relative time formatting (`timeAgo`) and action badges.
+- **Follow-ups UX:**
+  - Filter tabs (All, Overdue, Due Today, Upcoming, Completed).
+  - Search input for follow-ups by title or lead name.
+  - Edit Follow-up modal dialog for editing title and due date.
+- **Verification:**
+  - All 80 smoke test assertions green in `server/scripts/smoke.js`.
+  - Vite production build verified clean (`npm run build`).
+
+---
+
+### Phase 13 — Core SaaS Features (Profile Editing, CSV Import/Export, Source Analytics, Preferences, Audit History)
+
+**Goal:** Add essential SaaS features for solo founders and small teams without making the product bloated or introducing complex enterprise multi-tenant/teams overhead.
+
+**What was built/changed:**
+
+- **Profile Editing (`GET /api/user/profile`, `PATCH /api/user/profile`):**
+  - Expanded `User` model with `phone`, `jobTitle`, `companyName`, and `bio`.
+  - Profile settings tab lets users manage contact info and business details.
+- **Password & Account Settings (Clerk Native):**
+  - Settings page "Security & Account" tab embeds Clerk's native `openUserProfile()` trigger button.
+  - Password updates, email management, and MFA are delegated entirely to Clerk natively (no custom password endpoints or raw hash storage).
+- **CSV Lead Export (`GET /api/leads/export`):**
+  - Backend endpoint returns `.csv` download of authenticated user's leads with escaped CSV cells and `Content-Disposition` attachment header.
+  - Front-end "Export CSV" button triggers browser download.
+- **CSV Lead Import (`POST /api/leads/import` + `CsvImportDialog`):**
+  - Drag-and-drop CSV importer with native string parser, auto-header detection, preview table of parsed rows, row validation (requires `name`), bulk insertion attached to `req.user.id`, and bulk activity logging.
+- **Lead Source Analytics (`sourceCounts` in `GET /api/dashboard`):**
+  - Aggregates lead counts by acquisition source (`source`).
+  - Displays a Lead Source distribution chart on the dashboard.
+- **Improved Audit History (`GET /api/activities`):**
+  - Enhanced activity endpoint with filtering by activity `type`, message search, and pagination.
+- **User Preferences (`PATCH /api/user/preferences`):**
+  - Persists `itemsPerPage` (10, 20, 50), `defaultView` (`table`/`cards`), and `theme` (`light`/`dark`/`system`) in User schema and applies to workspace views.
+- **Tests & Verification:**
+  - 80/80 smoke test assertions green in `server/scripts/smoke.js` covering profile GET/PATCH, preferences PATCH, CSV export, CSV import validation, lead sorting, and source analytics.
+
+---
+
 ## 7. AI Agent Architecture
 
 ### 7.1 How the assistant stays safe
@@ -1162,5 +1291,78 @@ qualification, chat + safe tool actions) → **Phase 8** runtime fixes
 (login/register 400/404, MongoDB not-installed fallback, seed hang, 55-assertion
 smoke suite green) → **Phase 9** docs baseline + remote git → **Phase 10** Clerk
 auth (backend sessions + frontend sign-in, profile sync, rate limiting,
-69-assertion smoke suite green). Next after Phase 10: production deployment,
-notifications, or team mode.*
+69-assertion smoke suite green) → **Phase 11** UI polish (sidebar, Framer Motion,
+status/badge colours, responsive drawer) → **Phase 12** SaaS CRM polish (leads
+table sort/search/filter, dashboard charts, follow-up tabs, lead-details hero,
+settings page, 80-assertion smoke suite green) → **Phase 13** core SaaS features
+(user profile + preferences, CSV export/import, lead-source analytics, audit
+history, 80-assertion smoke suite green) → **Phase 14** testing hardening
+(108-assertion smoke suite, follow-up PATCH validation, type filter on lead
+activities, new edge-case coverage — see Phase 14 section).*
+
+---
+
+## Phase 14 — Automated Testing & Reliability Strengthening
+
+### Goal
+
+Expand automated test coverage to harden every critical path: auth edge cases,
+ownership isolation, validation contracts, CRUD flows, AI tool authorization,
+and all edge cases across follow-ups, activities, dashboard, CSV import/export,
+and user profile/preferences.
+
+### Test Strategy
+
+All tests live in `server/scripts/smoke.js`. This single-file suite:
+- Spins up an in-memory MongoDB via `mongodb-memory-server` (no external DB required).
+- Generates an RSA keypair on boot; wires the public key into `CLERK_JWT_KEY` so
+  `@clerk/express` verifies tokens offline with no network call.
+- Mints RS256-signed tokens for two user identities (`DEMO_USER`, `OTHER_USER`).
+- Tests run top-to-bottom in sequence; state accumulates across sections, so
+  ordering matters (creates before reads, etc.).
+
+This approach exercises the real Express middleware stack, Mongoose schema
+validation, `validateBody` middleware, `asyncHandler`, `ApiError`, and the
+`actionExecutor` security boundary — all without external dependencies.
+
+### Test Areas & Key Cases
+
+| Area | Key Assertions |
+|---|---|
+| **Clerk Auth** | No token → 401; garbage token → 401; expired token → 401; wrong-key signature → 401; fake `userId` claim ignored; `sub` is canonical identity |
+| **User Sync** | App User auto-created on first request; no `passwordHash` field; email synced from Clerk claims; two clerk identities produce two distinct app users |
+| **Lead CRUD** | Create with defaults (201); empty name → 400 with `details`; bad status enum → 400; malformed JSON → 400; search; status filter; source filter; pagination shape; sort-by-name; invalid sortBy falls back silently; GET missing → 404; PATCH status+notes; bad status patch → 400; activity logging; cascade delete (follow-ups + activities purged) |
+| **Follow-ups** | Create (201); missing lead → 404; bad date → 400; openOnly filter; complete toggle; `PATCH` empty title → 400; `PATCH` bad date → 400; `PATCH` valid title → 200; `DELETE` owned → 200; `DELETE` unowned → 404; deleted item absent from list |
+| **Activities** | Auto-recorded for create/status/note/follow-up/AI actions; `?type=` filter on `/leads/:id/activities`; `?type=` filter on `/activities`; `?search=` keyword filter; no-match search returns empty array; lead name populated; activity feed has `lead.name` |
+| **Dashboard** | Status totals correct; `statusCounts` covers all statuses; `sourceCounts` items have `source` + `count` keys; `leads.won` is a number; pending follow-ups populated; recent activity populated; isolated per user |
+| **Ownership Isolation** | User B cannot GET/PATCH/DELETE User A's lead; User B cannot create follow-up on User A's lead; User B cannot PATCH/DELETE User A's follow-up; User B's activity feed excludes User A's activities; User B's dashboard total is isolated; User B's AI tool calls on User A's lead → 404 |
+| **AI Tools** | No auth → 401; unknown tool → 400; missing required param → 400; invalid enum param → 400; `updateLeadStatus` executes and persists; `addLeadNote` executes; `createFollowUp` executes; bad date → 400; AI actions logged with `actor: 'ai'` metadata; AI endpoints rate-limited → 429 |
+| **AI Ownership** | `POST /ai/chat` with unowned lead → 404; `POST /ai/reply` with unowned lead → 404; `POST /ai/analyze` with unowned lead → 404 |
+| **AI Chat/Reply Validation** | `history` must be array → 400; history item invalid role → 400; invalid `tone` → 400; no Gemini key → 500 with clear error |
+| **User Profile** | `GET /api/user/profile` → 200; `PATCH` with valid fields → 200; `PATCH` with empty name → 400 |
+| **User Preferences** | `PATCH` itemsPerPage valid (10, 20, 50) → 200; `PATCH` itemsPerPage=100 → 400; `PATCH` bad `defaultView` → 400; `PATCH` bad `theme` → 400; all valid → 200 |
+| **CSV Export** | `GET /api/leads/export` → 200 `text/csv` with header row |
+| **CSV Import** | Valid rows imported; empty-name rows skipped; non-array body treated as empty; all-invalid rows → importedCount 0, skippedCount correct |
+
+### Final Test Results
+
+```
+108 passed, 0 failed
+```
+
+*(Up from 80 assertions in Phase 13.)*
+
+### Bugs Fixed / Hardening Applied
+
+| Bug / Gap | Fix |
+|---|---|
+| `updateFollowUp` accepted empty-string titles and invalid date strings without error | Added validation in `server/src/controllers/followups.js`: empty/whitespace-only title → `ApiError(400)`; unparseable date → `ApiError(400)` |
+| `getLeadActivities` had no `?type=` filter | Added optional `type` query param filtering (whitelisted via `ACTIVITY_TYPES`) in `server/src/controllers/activities.js` |
+
+### Files Changed
+
+| File | Change |
+|---|---|
+| `server/src/controllers/followups.js` | `updateFollowUp`: added title & dueDate input validation |
+| `server/src/controllers/activities.js` | `getLeadActivities`: added optional `?type=` filter |
+| `server/scripts/smoke.js` | Added 28 new assertions (108 total); expanded sections: follow-up PATCH validation, follow-up DELETE + ownership, activity type filter, activity search, lead source filter, lead pagination, invalid sortBy fallback, profile name validation, preferences edge cases, CSV import edge cases, dashboard shape, AI ownership for chat/reply/analyze |

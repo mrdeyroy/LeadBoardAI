@@ -5,6 +5,7 @@ import {
   Copy,
   Loader2,
   MessageSquareText,
+  RefreshCw,
   ScanSearch,
   Send,
   Sparkles,
@@ -17,6 +18,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
 import { api } from '@/lib/api'
 
 const QUALITY_BADGE = {
@@ -24,6 +26,12 @@ const QUALITY_BADGE = {
   Medium: 'bg-amber-500/10 text-amber-600 dark:text-amber-400',
   Low: 'bg-rose-500/10 text-rose-600 dark:text-rose-400',
 }
+
+const TONES = [
+  { id: 'short', label: 'Short' },
+  { id: 'professional', label: 'Professional' },
+  { id: 'friendly', label: 'Friendly' },
+]
 
 function isoDate(date) {
   const y = date.getFullYear()
@@ -41,7 +49,10 @@ function dueDateInDays(days) {
 function describeProposal(action) {
   const { tool, params } = action
   if (tool === 'updateLeadStatus') return `Change status to ${params.status}`
-  if (tool === 'addLeadNote') return 'Add a note to this lead'
+  if (tool === 'addLeadNote') {
+    const content = typeof params.content === 'string' ? params.content : ''
+    return `Add note: ${content.slice(0, 40)}${content.length > 40 ? '…' : ''}`
+  }
   if (tool === 'createFollowUp') return `Schedule follow-up: ${params.title}`
   return `Run ${tool}`
 }
@@ -104,17 +115,68 @@ function AnalysisView({ analysis }) {
 }
 
 function ReplyView({ reply, onCopy }) {
+  const [draft, setDraft] = useState(reply)
   return (
     <div className="flex flex-col gap-2 rounded-lg border bg-muted/40 p-3">
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
           Drafted reply
         </span>
-        <Button variant="outline" size="sm" onClick={onCopy}>
+        <Button variant="outline" size="sm" onClick={() => onCopy(draft)}>
           <Copy /> Copy
         </Button>
       </div>
-      <p className="whitespace-pre-wrap text-sm">{reply}</p>
+      <Textarea
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        rows={6}
+        className="resize-none bg-background text-sm"
+      />
+      <p className="text-right text-[11px] text-muted-foreground">Edit before copying if needed.</p>
+    </div>
+  )
+}
+
+function QualifyView({ current, recommendation }) {
+  const changed = current !== recommendation.status
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border bg-muted/40 p-3 text-sm">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Qualification
+        </span>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline">{current}</Badge>
+          <span className="text-muted-foreground">→</span>
+          <Badge className={changed ? 'bg-primary text-primary-foreground' : undefined}>
+            {recommendation.status}
+          </Badge>
+        </div>
+      </div>
+      <p>{recommendation.reason}</p>
+      {!changed && (
+        <p className="text-xs text-muted-foreground">
+          The AI recommends keeping this lead at its current status — nothing to change.
+        </p>
+      )}
+    </div>
+  )
+}
+
+function TimingView({ recommendation }) {
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border bg-muted/40 p-3 text-sm">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Follow-up timing
+        </span>
+        <Badge>
+          {Number.isInteger(recommendation.dueInDays)
+            ? `In ${recommendation.dueInDays} day${recommendation.dueInDays === 1 ? '' : 's'}`
+            : 'Suggested'}
+        </Badge>
+      </div>
+      <p>{recommendation.reason}</p>
     </div>
   )
 }
@@ -125,7 +187,7 @@ function ProposalCard({ proposal, busy, onConfirm, onCancel }) {
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-2 text-sm font-medium">
           <Sparkles className="size-4 shrink-0 text-primary" />
-          Suggested action
+          Proposed by AI — requires your confirmation
         </div>
         <Button variant="ghost" size="icon" className="size-6" onClick={onCancel}>
           <X className="size-3.5" />
@@ -134,7 +196,7 @@ function ProposalCard({ proposal, busy, onConfirm, onCancel }) {
       <p className="text-sm">{proposal.label}</p>
       {proposal.reason && <p className="text-xs text-muted-foreground">{proposal.reason}</p>}
       <Button size="sm" className="mt-1 w-full" disabled={busy} onClick={() => onConfirm(proposal)}>
-        <Check /> Confirm
+        <Check /> Confirm & run
       </Button>
     </div>
   )
@@ -157,11 +219,12 @@ function ChatBubble({ message }) {
   )
 }
 
-export function AIPanel({ leadId, leadName, onChanged }) {
+export function AIPanel({ leadId, leadName, leadStatus, onChanged }) {
   const idRef = useRef(0)
   const [busy, setBusy] = useState(null)
   const [error, setError] = useState('')
   const [result, setResult] = useState(null)
+  const [tone, setTone] = useState('professional')
   const [proposals, setProposals] = useState([])
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
@@ -181,33 +244,47 @@ export function AIPanel({ leadId, leadName, onChanged }) {
         setResult({ type, data: data.reply })
       } else {
         const rec = data.recommendation
-        const proposal =
-          type === 'qualify'
-            ? {
-                key: nextKey(),
-                label: `Change status to "${rec.status}"`,
-                reason: rec.reason || `AI recommends "${rec.status}".`,
-                tool: 'updateLeadStatus',
-                params: { leadId, status: rec.status },
-              }
-            : {
-                key: nextKey(),
-                label: `Follow up with ${leadName}`,
-                reason: rec.reason || 'AI suggested a follow-up.',
-                tool: 'createFollowUp',
-                params: {
-                  leadId,
-                  title: `Follow up with ${leadName}`,
-                  dueDate: dueDateInDays(rec.dueInDays),
-                },
-              }
+        if (type === 'qualify' && rec.status !== leadStatus) {
+          setProposals((p) => [
+            ...p,
+            {
+              key: nextKey(),
+              label: `Change status to "${rec.status}"`,
+              reason: rec.reason || `AI recommends "${rec.status}".`,
+              tool: 'updateLeadStatus',
+              params: { leadId, status: rec.status },
+            },
+          ])
+        }
+        if (type === 'timing') {
+          setProposals((p) => [
+            ...p,
+            {
+              key: nextKey(),
+              label: rec.title || `Follow up with ${leadName}`,
+              reason: rec.reason || 'AI suggested a follow-up.',
+              tool: 'createFollowUp',
+              params: {
+                leadId,
+                title: rec.title || `Follow up with ${leadName}`,
+                dueDate: dueDateInDays(rec.dueInDays),
+              },
+            },
+          ])
+        }
         setResult({ type, data: rec })
-        setProposals((p) => [...p, proposal])
       }
     } catch (err) {
       setError(err.message)
     } finally {
       setBusy(null)
+    }
+  }
+
+  const chooseTone = (next) => {
+    setTone(next)
+    if (next !== tone && result?.type === 'reply') {
+      run('reply', () => api('/ai/reply', { method: 'POST', body: { leadId, tone: next } }))
     }
   }
 
@@ -217,10 +294,11 @@ export function AIPanel({ leadId, leadName, onChanged }) {
     if (!text || busy) return
     setInput('')
     setError('')
+    const history = messages.slice(-12).map((m) => ({ role: m.role, text: m.text }))
     setMessages((m) => [...m, { role: 'user', text }])
     setBusy('chat')
     try {
-      const data = await api('/ai/chat', { method: 'POST', body: { leadId, message: text } })
+      const data = await api('/ai/chat', { method: 'POST', body: { leadId, message: text, history } })
       if (data.reply) setMessages((m) => [...m, { role: 'assistant', text: data.reply }])
       const suggest = (data.actions ?? []).map((a) => ({
         key: nextKey(),
@@ -290,9 +368,7 @@ export function AIPanel({ leadId, leadName, onChanged }) {
             label="Draft reply"
             busy={busy === 'reply'}
             onClick={() =>
-              run('reply', () =>
-                api('/ai/reply', { method: 'POST', body: { leadId, tone: 'professional' } })
-              )
+              run('reply', () => api('/ai/reply', { method: 'POST', body: { leadId, tone } }))
             }
           />
           <ActionButton
@@ -309,6 +385,22 @@ export function AIPanel({ leadId, leadName, onChanged }) {
           />
         </div>
 
+        <div className="flex items-center gap-1">
+          <span className="text-xs font-medium text-muted-foreground">Reply tone:</span>
+          {TONES.map((t) => (
+            <Button
+              key={t.id}
+              variant={tone === t.id ? 'default' : 'ghost'}
+              size="sm"
+              className="h-7 px-2 text-xs"
+              disabled={busy !== null}
+              onClick={() => chooseTone(t.id)}
+            >
+              {t.label}
+            </Button>
+          ))}
+        </div>
+
         {error && (
           <p className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
             {error}
@@ -321,7 +413,11 @@ export function AIPanel({ leadId, leadName, onChanged }) {
         )}
 
         {result?.type === 'analyze' && <AnalysisView analysis={result.data} />}
-        {result?.type === 'reply' && <ReplyView reply={result.data} onCopy={() => copyReply(result.data)} />}
+        {result?.type === 'reply' && <ReplyView reply={result.data} onCopy={copyReply} />}
+        {result?.type === 'qualify' && (
+          <QualifyView current={leadStatus} recommendation={result.data} />
+        )}
+        {result?.type === 'timing' && <TimingView recommendation={result.data} />}
 
         {proposals.length > 0 && (
           <div className="flex flex-col gap-2">
@@ -361,6 +457,10 @@ export function AIPanel({ leadId, leadName, onChanged }) {
             </Button>
           </form>
         </div>
+        <p className="flex items-center gap-1 text-[11px] text-muted-foreground">
+          <RefreshCw className="size-3" />
+          Proposed actions only run after you confirm them.
+        </p>
       </CardContent>
     </Card>
   )

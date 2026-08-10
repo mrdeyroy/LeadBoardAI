@@ -127,10 +127,10 @@ All routes except `/api/health` return `401` without a valid Clerk session.
 | GET      | `/api/activities`          | Recent activity feed: `?limit=`      |
 | GET      | `/api/dashboard`           | Stats, status funnel, pending follow-ups, recent activity |
 | POST     | `/api/ai/analyze`          | Lead analysis (JSON)                    |
-| POST     | `/api/ai/reply`            | Drafted reply (`tone`: professional/casual) |
-| POST     | `/api/ai/qualify`          | Recommended status + reason             |
-| POST     | `/api/ai/timing`           | Recommended follow-up timing            |
-| POST     | `/api/ai/chat`             | Conversational: `{ reply, actions[] }` — action proposals are never auto-executed |
+| POST     | `/api/ai/reply`            | Drafted reply (`tone`: short/professional/friendly) |
+| POST     | `/api/ai/qualify`          | Recommended status + reason (not applied)           |
+| POST     | `/api/ai/timing`           | Recommended follow-up timing (dueInDays + title)    |
+| POST     | `/api/ai/chat`             | Conversational with history: `{ reply, actions[] }` — action proposals are never auto-executed |
 | POST     | `/api/ai/actions`          | Confirm + execute a whitelisted tool: `{ tool, params }` |
 | GET      | `/api/health`              | Service + DB status                  |
 

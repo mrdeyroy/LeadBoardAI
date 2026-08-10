@@ -68,9 +68,24 @@ export const createFollowUp = asyncHandler(async (req, res) => {
 export const updateFollowUp = asyncHandler(async (req, res) => {
   const followUp = await findOwnedFollowUp(req.params.id, req.user.id)
 
-  if (req.body.title !== undefined) followUp.title = req.body.title
-  if (req.body.dueDate !== undefined) followUp.dueDate = new Date(req.body.dueDate)
-  if (req.body.completed !== undefined) followUp.completed = req.body.completed
+  if (req.body.title !== undefined) {
+    if (typeof req.body.title !== 'string' || !req.body.title.trim()) {
+      throw new ApiError(400, 'Title is required')
+    }
+    followUp.title = req.body.title.trim().slice(0, 200)
+  }
+
+  if (req.body.dueDate !== undefined) {
+    const d = new Date(req.body.dueDate)
+    if (Number.isNaN(d.getTime())) {
+      throw new ApiError(400, 'Invalid due date')
+    }
+    followUp.dueDate = d
+  }
+
+  if (req.body.completed !== undefined) {
+    followUp.completed = Boolean(req.body.completed)
+  }
 
   await followUp.save()
   res.json({ followUp: followUp.toJSON() })

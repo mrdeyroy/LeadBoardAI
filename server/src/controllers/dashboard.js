@@ -27,10 +27,16 @@ const toFollowUpJSON = (doc) => ({
 export const getDashboard = asyncHandler(async (req, res) => {
   const userId = new mongoose.Types.ObjectId(req.user.id)
 
-  const [statusRows, total, pendingFollowUps, recentActivity] = await Promise.all([
+  const [statusRows, sourceRows, total, pendingFollowUps, recentActivity] = await Promise.all([
     Lead.aggregate([
       { $match: { user: userId } },
       { $group: { _id: '$status', count: { $sum: 1 } } },
+    ]),
+    Lead.aggregate([
+      { $match: { user: userId } },
+      { $group: { _id: '$source', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 10 },
     ]),
     Lead.countDocuments({ user: userId }),
     FollowUp.find({ user: userId, completed: false })
@@ -50,6 +56,11 @@ export const getDashboard = asyncHandler(async (req, res) => {
     byStatus[row._id] = row.count
   }
 
+  const sourceCounts = sourceRows.map((row) => ({
+    source: row._id && row._id.trim() ? row._id : 'Direct / Unspecified',
+    count: row.count,
+  }))
+
   res.json({
     leads: {
       total,
@@ -61,6 +72,7 @@ export const getDashboard = asyncHandler(async (req, res) => {
       status,
       count: byStatus[status],
     })),
+    sourceCounts,
     pendingFollowUps: pendingFollowUps.map(toFollowUpJSON),
     recentActivity: recentActivity.map(toActivityJSON),
   })

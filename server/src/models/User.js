@@ -4,6 +4,15 @@ const userSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true, maxlength: 100 },
     email: { type: String, trim: true, lowercase: true, maxlength: 254, default: '' },
+    phone: { type: String, trim: true, maxlength: 50, default: '' },
+    jobTitle: { type: String, trim: true, maxlength: 100, default: '' },
+    companyName: { type: String, trim: true, maxlength: 100, default: '' },
+    bio: { type: String, trim: true, maxlength: 500, default: '' },
+    preferences: {
+      itemsPerPage: { type: Number, default: 20 },
+      defaultView: { type: String, enum: ['table', 'cards'], default: 'table' },
+      theme: { type: String, enum: ['light', 'dark', 'system'], default: 'system' },
+    },
     clerkUserId: {
       type: String,
       required: true,

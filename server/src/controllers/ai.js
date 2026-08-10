@@ -14,7 +14,7 @@ export const analyze = asyncHandler(async (req, res) => {
     leadId: lead._id,
     type: 'ai_analysis',
     message: `AI analysis generated (quality: ${analysis.quality})`,
-    metadata: { leadId: lead._id.toString(), quality: analysis.quality },
+    metadata: { leadId: lead._id.toString(), quality: analysis.quality, actor: 'ai' },
   })
 
   res.json({ analysis })
@@ -40,9 +40,27 @@ export const timing = asyncHandler(async (req, res) => {
 
 export const chat = asyncHandler(async (req, res) => {
   const lead = await findOwnedLead(req.body.leadId, req.user.id)
-  const result = await aiService.chat(lead, req.body.message)
+  const history = sanitizeHistory(req.body.history)
+  const result = await aiService.chat(lead, req.body.message, history)
   res.json(result)
 })
+
+function sanitizeHistory(history) {
+  if (history === undefined || history === null) return []
+  if (!Array.isArray(history)) throw new ApiError(400, 'history must be an array')
+  if (history.length > 12) return sanitizeHistory(history.slice(-12))
+
+  const clean = []
+  for (const item of history) {
+    if (!item || typeof item !== 'object') throw new ApiError(400, 'invalid history item')
+    const role = item.role === 'user' ? 'user' : item.role === 'assistant' ? 'assistant' : null
+    const text = typeof item.text === 'string' ? item.text.trim() : ''
+    if (!role || !text) throw new ApiError(400, 'history items need a valid role and text')
+    if (text.length > 5000) throw new ApiError(400, 'history text is too long')
+    clean.push({ role, text })
+  }
+  return clean
+}
 
 export const runAction = asyncHandler(async (req, res) => {
   const { tool, params } = req.body ?? {}

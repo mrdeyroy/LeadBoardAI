@@ -15,10 +15,12 @@ const parsePositiveInt = (value, fallback, max) => {
   return Math.min(parsed, max)
 }
 
+const ALLOWED_SORT_FIELDS = ['createdAt', 'name', 'company', 'status', 'budget', 'source']
+
 export const listLeads = asyncHandler(async (req, res) => {
-  const { search, status } = req.query
+  const { search, status, source, sortBy = 'createdAt', sortOrder = 'desc' } = req.query
   const page = parsePositiveInt(req.query.page, 1, 1_000_000)
-  const limit = parsePositiveInt(req.query.limit, 20, 50)
+  const limit = parsePositiveInt(req.query.limit, 20, 100)
 
   const filter = { user: req.user.id }
 
@@ -29,6 +31,7 @@ export const listLeads = asyncHandler(async (req, res) => {
       { company: pattern },
       { email: pattern },
       { phone: pattern },
+      { source: pattern },
     ]
   }
 
@@ -36,9 +39,17 @@ export const listLeads = asyncHandler(async (req, res) => {
     filter.status = status
   }
 
+  if (source && typeof source === 'string' && source.trim()) {
+    filter.source = new RegExp(escapeRegExp(source.trim()), 'i')
+  }
+
+  const sortField = ALLOWED_SORT_FIELDS.includes(sortBy) ? sortBy : 'createdAt'
+  const direction = sortOrder === 'asc' ? 1 : -1
+  const sort = { [sortField]: direction }
+
   const [leads, total] = await Promise.all([
     Lead.find(filter)
-      .sort({ createdAt: -1 })
+      .sort(sort)
       .skip((page - 1) * limit)
       .limit(limit),
     Lead.countDocuments(filter),
@@ -128,4 +139,108 @@ export const deleteLead = asyncHandler(async (req, res) => {
   ])
 
   res.json({ message: 'Lead deleted' })
+})
+
+function escapeCsvCell(val) {
+  if (val === null || val === undefined) return ''
+  const str = String(val)
+  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+    return `"${str.replace(/"/g, '""')}"`
+  }
+  return str
+}
+
+export const exportLeads = asyncHandler(async (req, res) => {
+  const leads = await Lead.find({ user: req.user.id }).sort({ createdAt: -1 })
+
+  const headers = [
+    'Name',
+    'Company',
+    'Email',
+    'Phone',
+    'Source',
+    'Status',
+    'Budget',
+    'Requirement',
+    'Timeline',
+    'Notes',
+    'Created At',
+  ]
+
+  const rows = leads.map((l) => [
+    escapeCsvCell(l.name),
+    escapeCsvCell(l.company),
+    escapeCsvCell(l.email),
+    escapeCsvCell(l.phone),
+    escapeCsvCell(l.source),
+    escapeCsvCell(l.status),
+    escapeCsvCell(l.budget),
+    escapeCsvCell(l.requirement),
+    escapeCsvCell(l.timeline),
+    escapeCsvCell(l.notes),
+    escapeCsvCell(l.createdAt ? new Date(l.createdAt).toISOString() : ''),
+  ])
+
+  const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\n')
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8')
+  res.setHeader('Content-Disposition', 'attachment; filename="leads_export.csv"')
+  res.status(200).send(csvContent)
+})
+
+export const importLeads = asyncHandler(async (req, res) => {
+  const rawLeads = Array.isArray(req.body.leads) ? req.body.leads : []
+
+  const validLeads = []
+  let skippedCount = 0
+
+  for (const item of rawLeads) {
+    if (!item || typeof item !== 'object') {
+      skippedCount++
+      continue
+    }
+
+    const name = typeof item.name === 'string' ? item.name.trim().slice(0, 200) : ''
+    if (!name) {
+      skippedCount++
+      continue
+    }
+
+    const status =
+      typeof item.status === 'string' && LEAD_STATUSES.includes(item.status.trim())
+        ? item.status.trim()
+        : 'New'
+
+    validLeads.push({
+      user: req.user.id,
+      name,
+      company: typeof item.company === 'string' ? item.company.trim().slice(0, 200) : '',
+      email: typeof item.email === 'string' ? item.email.trim().toLowerCase().slice(0, 254) : '',
+      phone: typeof item.phone === 'string' ? item.phone.trim().slice(0, 50) : '',
+      source: typeof item.source === 'string' ? item.source.trim().slice(0, 100) : 'CSV Import',
+      requirement: typeof item.requirement === 'string' ? item.requirement.trim().slice(0, 2000) : '',
+      budget: typeof item.budget === 'string' ? item.budget.trim().slice(0, 100) : '',
+      timeline: typeof item.timeline === 'string' ? item.timeline.trim().slice(0, 100) : '',
+      status,
+      notes: typeof item.notes === 'string' ? item.notes.trim().slice(0, 5000) : '',
+    })
+  }
+
+  if (validLeads.length > 0) {
+    const createdDocs = await Lead.insertMany(validLeads)
+
+    const sampleLead = createdDocs[0]
+    await recordActivity({
+      userId: req.user.id,
+      leadId: sampleLead._id,
+      type: 'lead_created',
+      message: `Imported ${validLeads.length} lead${validLeads.length === 1 ? '' : 's'} via CSV`,
+      metadata: { count: validLeads.length },
+    })
+  }
+
+  res.status(200).json({
+    importedCount: validLeads.length,
+    skippedCount,
+  })
 })

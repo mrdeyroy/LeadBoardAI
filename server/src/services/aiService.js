@@ -9,6 +9,8 @@ import {
   TOOL_DECLARATIONS,
 } from './prompts.js'
 import { ApiError } from '../utils/ApiError.js'
+import FollowUp from '../models/FollowUp.js'
+import Activity from '../models/Activity.js'
 
 const JSON_CONFIG = { temperature: 0.3, responseMimeType: 'application/json' }
 
@@ -39,9 +41,33 @@ async function generateText(systemInstruction, leadText, message = '', temperatu
   return partsToText(parts).trim()
 }
 
+async function loadInsights(leadId) {
+  const [followUps, activities] = await Promise.all([
+    FollowUp.find({ lead: leadId, completed: false })
+      .sort({ dueDate: 1 })
+      .limit(3)
+      .select('title dueDate completed')
+      .lean(),
+    Activity.find({ lead: leadId })
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .select('message type')
+      .lean(),
+  ])
+
+  return {
+    followUps: followUps.map((f) => ({
+      title: f.title,
+      dueDate: f.dueDate,
+    })),
+    activities: activities.map((a) => ({ message: a.message, type: a.type })),
+  }
+}
+
 export const aiService = {
   async analyzeLead(lead) {
-    const data = await generateJson(PROMPTS.analyze, buildLeadContext(lead))
+    const insights = await loadInsights(lead._id)
+    const data = await generateJson(PROMPTS.analyze, buildLeadContext(lead, insights))
     return {
       summary: data.summary ?? '',
       quality: ['High', 'Medium', 'Low'].includes(data.quality) ? data.quality : 'Medium',
@@ -53,7 +79,8 @@ export const aiService = {
   },
 
   async generateReply(lead, tone = 'professional') {
-    const reply = await generateText(PROMPTS.reply(tone), buildLeadContext(lead))
+    const insights = await loadInsights(lead._id)
+    const reply = await generateText(PROMPTS.reply(tone), buildLeadContext(lead, insights))
     if (!reply) {
       throw new ApiError(502, 'AI returned an empty reply')
     }
@@ -61,7 +88,8 @@ export const aiService = {
   },
 
   async qualifyLead(lead) {
-    const data = await generateJson(PROMPTS.qualify, buildLeadContext(lead), 0.2)
+    const insights = await loadInsights(lead._id)
+    const data = await generateJson(PROMPTS.qualify, buildLeadContext(lead, insights), 0.2)
     return {
       status: data.status ?? lead.status,
       reason: data.reason ?? '',
@@ -69,23 +97,32 @@ export const aiService = {
   },
 
   async suggestTiming(lead) {
-    const data = await generateJson(PROMPTS.timing, buildLeadContext(lead), 0.2)
+    const insights = await loadInsights(lead._id)
+    const data = await generateJson(PROMPTS.timing, buildLeadContext(lead, insights), 0.2)
     const days = Number.parseInt(data.dueInDays, 10)
     return {
-      dueInDays: Number.isInteger(days) && days >= 0 ? days : null,
+      dueInDays: Number.isInteger(days) && days >= 0 && days <= 14 ? days : null,
       reason: data.reason ?? '',
+      title: data.title ?? '',
     }
   },
 
-  async chat(lead, message) {
+  async chat(lead, message, history = []) {
+    const insights = await loadInsights(lead._id)
+    const contents = [
+      ...history.map((item) => ({
+        role: item.role === 'user' ? 'user' : 'model',
+        parts: [{ text: item.text }],
+      })),
+      {
+        role: 'user',
+        parts: [{ text: `${buildLeadContext(lead, insights)}\n\nUser message: ${message || ''}` }],
+      },
+    ]
+
     const { parts } = await generateContent({
       systemInstruction: PROMPTS.chat,
-      contents: [
-        {
-          role: 'user',
-          parts: [{ text: `${buildLeadContext(lead)}\n\nUser message: ${message || ''}` }],
-        },
-      ],
+      contents,
       tools: [{ functionDeclarations: TOOL_DECLARATIONS }],
       generationConfig: { temperature: 0.5 },
     })

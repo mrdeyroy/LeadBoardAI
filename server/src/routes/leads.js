@@ -3,7 +3,9 @@ import { Router } from 'express'
 import {
   createLead,
   deleteLead,
+  exportLeads,
   getLead,
+  importLeads,
   listLeads,
   updateLead,
 } from '../controllers/leads.js'
@@ -36,6 +38,8 @@ const createSchema = {
 const bodyFields = Object.keys(updateSchema)
 
 router.get('/', listLeads)
+router.get('/export', exportLeads)
+router.post('/import', importLeads)
 router.post('/', trimFields(bodyFields), validateBody(createSchema), createLead)
 router.get('/:id', getLead)
 router.patch('/:id', trimFields(bodyFields), validateBody(updateSchema), updateLead)
