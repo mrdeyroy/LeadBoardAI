@@ -33,8 +33,14 @@ function App() {
       <ClerkTokenBridge />
       <BrowserRouter>
         <Routes>
-          <Route path="/login" element={<GuestOnly>{withSuspense(<Login />)}</GuestOnly>} />
-          <Route path="/register" element={<GuestOnly>{withSuspense(<Register />)}</GuestOnly>} />
+          <Route path="/login">
+            <Route index element={<GuestOnly>{withSuspense(<Login />)}</GuestOnly>} />
+            <Route path="*" element={<GuestOnly>{withSuspense(<Login />)}</GuestOnly>} />
+          </Route>
+          <Route path="/register">
+            <Route index element={<GuestOnly>{withSuspense(<Register />)}</GuestOnly>} />
+            <Route path="*" element={<GuestOnly>{withSuspense(<Register />)}</GuestOnly>} />
+          </Route>
           <Route element={<RequireAuth><AppShell /></RequireAuth>}>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={withSuspense(<Dashboard />)} />
