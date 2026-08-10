@@ -1,4 +1,5 @@
 import { useLocation, useNavigate } from 'react-router-dom'
+import { useClerk, useUser } from '@clerk/clerk-react'
 import { ChevronDown, LogOut } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -13,17 +14,21 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { SidebarTrigger } from '@/components/ui/sidebar'
-import { useAuth } from '@/context/AuthContext'
 import { initials } from '@/lib/format'
 import { sectionTitle } from './nav'
 
 export function TopBar() {
   const { pathname } = useLocation()
   const navigate = useNavigate()
-  const { user, logout } = useAuth()
+  const { user } = useUser()
+  const { signOut } = useClerk()
+
+  const displayName =
+    [user?.firstName, user?.lastName].filter(Boolean).join(' ') || user?.username || 'User'
+  const email = user?.primaryEmailAddress?.emailAddress ?? ''
 
   const handleLogout = async () => {
-    await logout()
+    await signOut()
     toast.success('Logged out')
     navigate('/login')
   }
@@ -37,17 +42,17 @@ export function TopBar() {
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="h-9 gap-2 px-2">
               <Avatar className="size-7">
-                <AvatarFallback className="text-xs">{initials(user?.name)}</AvatarFallback>
+                <AvatarFallback className="text-xs">{initials(displayName)}</AvatarFallback>
               </Avatar>
-              <span className="hidden text-sm font-medium sm:block">{user?.name}</span>
+              <span className="hidden text-sm font-medium sm:block">{displayName}</span>
               <ChevronDown className="size-3.5 text-muted-foreground" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>
               <div className="flex flex-col">
-                <span className="font-medium">{user?.name}</span>
-                <span className="text-xs font-normal text-muted-foreground">{user?.email}</span>
+                <span className="font-medium">{displayName}</span>
+                <span className="text-xs font-normal text-muted-foreground">{email}</span>
               </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />

@@ -1,8 +1,10 @@
 import cors from 'cors'
 import express from 'express'
 
+import { clerkAuth } from './config/clerk.js'
 import { env } from './config/env.js'
 import { errorHandler, notFound } from './middleware/errorHandler.js'
+import { requestLogger } from './middleware/logger.js'
 import authRouter from './routes/auth.js'
 import activitiesRouter from './routes/activities.js'
 import aiRouter from './routes/ai.js'
@@ -12,6 +14,9 @@ import healthRouter from './routes/health.js'
 import leadsRouter from './routes/leads.js'
 
 const app = express()
+
+app.use(clerkAuth())
+app.use(requestLogger)
 
 app.use(
   cors({

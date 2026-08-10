@@ -134,7 +134,7 @@ a rewrite.
 | Animation  | Framer Motion     | Tiny, declarative page transitions |
 | Backend    | Node.js + Express | Same language as the client; simple middleware pipeline; easy deploy |
 | Database   | MongoDB + Mongoose| Document model fits a lead; ODM validation; JSON-friendly |
-| Auth       | JWT               | Stateless tokens that work from any SPA/origin |
+| Auth       | Clerk             | Managed sign-in/sessions for a single-user SPA + API |
 | AI         | Gemini API        | Function calling + JSON output out of the box |
 
 **Frontend — React.** The app is component-based: pages compose small
@@ -162,10 +162,12 @@ our layered architecture (route → middleware → controller → service → mo
 
 **Database — MongoDB + Mongoose.** A lead is "everything I know about one
 person", which is a document, not a normalized row set. Mongoose supplies
-schemas, enum validation, indexes, and the pre-save hook for password hashing.
+schemas, enum validation, and indexes.
 
-**Auth — JWT.** Stateless bearer tokens: the server only verifies a signature.
-No session storage; works for SPA/API/mobile. (§6.)
+**Auth — Clerk.** Managed sign-in/sign-up flows, sessions, and profile
+management handled by Clerk (`@clerk/express` backend, `@clerk/clerk-react`
+frontend). The backend verifies sessions via `getAuth` and maps the Clerk
+identity to an in-app `User` row; no passwords are ever stored here. (§10.)
 
 **AI — Gemini API.** We call `gemini-2.5-flash` via the `generateContent` REST
 endpoint with system prompts, JSON response mode for structured reads, and
@@ -208,7 +210,7 @@ endpoint with system prompts, JSON response mode for structured reads, and
 
 Why each layer exists:
 
-- **Browser/SPA** — presents data, collects input, holds the JWT.
+- **Browser/SPA** — presents data, collects input; holds the Clerk session.
 - **Vite proxy (dev)** — the client calls relative `/api/*` URLs with zero
   CORS config and no hard-coded host.
 - **Express app** — HTTP boundary: parses JSON, enforces CORS, mounts router
@@ -259,8 +261,8 @@ LeadBoardAI/
 │   ├── index.html
 │   ├── vite.config.js           # proxy /api → :5000, @ alias
 │   └── src/
-│       ├── main.jsx             # entry: mounts <App/>
-│       ├── App.jsx              # routes + AuthProvider + lazy pages
+│       ├── main.jsx             # entry: ClerkProvider + mounts <App/>
+│       ├── App.jsx              # routes + lazy pages (Clerk guards)
 │       ├── index.css            # Tailwind + theme tokens
 │       ├── pages/               # route components (one per URL)
 │       ├── components/
@@ -272,7 +274,7 @@ LeadBoardAI/
 │       │   ├── dashboard/       # StatCard
 │       │   ├── activity/        # ActivityTimeline
 │       │   └── (RouteGuards, EmptyState, PagePlaceholder)
-│       ├── context/AuthContext.jsx
+│       ├── context/ClerkTokenBridge.jsx
 │       ├── hooks/useAsync.js
 │       └── lib/                 # api client, formatters, lead constants
 └── server/                      # Express + Mongoose backend
@@ -280,16 +282,15 @@ LeadBoardAI/
     │   ├── seed.js              # `npm run seed` demo data
     │   └── smoke.js             # in-memory API integration test suite
     └── src/
-        ├── index.js             # boot: listen + connectDB + graceful shutdown (prod)
-        ├── app.js               # express app: cors, routers, error middleware
-        ├── config/              # env.js (dotenv), db.js (connect + memory fallback)
+        ├── index.js             # boot: listen + connectDB + graceful shutdown
+        ├── app.js               # express app: cors, clerk, routers, error middleware
+        ├── config/              # env.js, db.js, clerk.js (middlware wiring)
         ├── routes/              # route mounting + validation middleware
         ├── controllers/         # request/response logic
-        ├── services/            # leadService, activityService, aiService, geminiService, prompts, actionExecutor
+        ├── services/            # leadService, activityService, aiService, geminiService, userSync, actionExecutor
         ├── tools/               # whitelisted AI tool implementations
         ├── models/              # Mongoose schemas
-        ├── middleware/          # requireAuth, errorHandler/notFound
-        ├── utils/               # ApiError, asyncHandler, jwt, validate
+        ├── middleware/          # requireAuth, rateLimit, logger, errorHandler/notFound
         └── seed/demoData.js     # shared demo dataset (seed + dev fallback)
 ```
 
@@ -301,7 +302,7 @@ Placement rules that keep this working:
   ownership). Imported by controllers **and** tools.
 - `tools/` — **nothing but the three allowed AI actions.** This is the security
   boundary for AI mutations.
-- `utils/` — pure helpers (errors, JWT, validation, async wrapper).
+- `utils/` — pure helpers (errors, validation, async wrapper).
 - `components/ui/` — generic primitives only; domain components live in their
   own folders.
 - Never put secrets/keys/connections in code — only in `.env`.
@@ -641,6 +642,80 @@ Next: Phase 10 (production readiness).
 
 ---
 
+### Phase 10 — Clerk Authentication (managed sign-in, sessions, rate limiting)
+
+**Goal:** replace the in-house JWT+bcrypt auth with Clerk — the same data model
+and `req.user` ownership stay, but identity, sign-in, sessions, and profile
+management move to Clerk. No functionality regressions, 69 smoke assertions
+green.
+
+**What was built/changed:**
+
+- **Backend → Clerk (`@clerk/express`):**
+  - `config/clerk.js` — `clerkAuth()` mounts `clerkMiddleware` (with optional
+    `CLERK_JWT_KEY`) when `CLERK_SECRET_KEY` is set, else a no-op. `requireAuth`
+    **fails closed** (401) when no keys are configured.
+  - `middleware/auth.js` — async `requireAuth`: reads `getAuth(req)`, requires
+    `isAuthenticated`, resolves the app `User` via `findOrCreateAppUser`, sets
+    `req.user`. Controllers keep using `req.user.id` unchanged.
+  - `services/userSync.js` (new) — `findOrCreateAppUser(clerkUserId,
+    sessionClaims)`: prefers profile from signed session claims, falls back to
+    the Clerk API, then placeholders offline.
+  - `models/User.js` — `clerkUserId` required/unique/indexed added; `email`
+    optional; `passwordHash` + bcrypt removed.
+  - Auth surface reduced to `GET /api/auth/me`; register/login/logout removed.
+  - **Rate limiting** (new dependency-free fixed-window IP limiter): 30/min on
+    `/api/auth/me` and `/api/ai/*`; the AI limit doubles as an abuse test.
+  - `middleware/logger.js` (request log: method/path/status/duration) and
+    hardened `errorHandler` (malformed JSON → 400, oversized body → 413).
+  - `index.js` — graceful shutdown on SIGTERM/SIGINT (server close + mongoose
+    disconnect + stop in-memory mongod).
+  - Seed/demo data tied to Clerk demo user `user_2demoLeadBoardAI`.
+  - `env.js` reads `CLERK_SECRET_KEY`, `CLERK_PUBLISHABLE_KEY`, `CLERK_JWT_KEY`;
+    production requires both Clerk keys; JWT vars removed.
+  - Dependencies: `@clerk/express` added; `bcryptjs` removed; `jsonwebtoken`
+    moved to devDependencies (tests only).
+- **Tests — `server/scripts/smoke.js` rewritten (69 assertions green):**
+  - Generates a throwaway RSA keypair, sets Clerk env vars, and mints signed
+    RS256 tokens (`jsonwebtoken`) for users, so auth is fully offline.
+  - Covers: no token / garbage / expired / wrong-signing-key / fake-`userId`
+    claim → 401; app-user sync from Clerk identity; every route's ownership
+    isolation; input validation; AI rate-limit 429; public health route.
+- **Frontend → Clerk (`@clerk/clerk-react`):**
+  - `main.jsx` wraps the app in `ClerkProvider` (`VITE_CLERK_PUBLISHABLE_KEY`).
+  - `context/ClerkTokenBridge.jsx` (new) — feeds `getToken()` into `lib/api.js`
+    every request; tokens **never** hit localStorage.
+  - `lib/api.js` — `setSessionTokenProvider` pattern, no token persistence.
+  - `App.jsx` + `components/RouteGuards.jsx` — `RequireAuth`/`GuestOnly` built
+    on Clerk `useAuth` (`isLoaded`/`isSignedIn`); `/login`/`/register` are
+    guest-only routes.
+  - `pages/Login.jsx` / `Register.jsx` — Clerk `<SignIn>`/`<SignUp>` embedded in
+    the branded `AuthLayoutCard`.
+  - `components/layout/TopBar.jsx`, `pages/Dashboard.jsx`, `pages/Settings.jsx`
+    use Clerk `useUser`/`useClerk` (display name, email, sign-out).
+  - `context/AuthContext.jsx` deleted.
+- **Docs/env:** `.env.example` (server + client) updated with Clerk vars only;
+  README, AGENTS.md, and this document reconciled (auth sections now describe
+  the Clerk flow).
+
+**Problems found & fixed:**
+
+- `req.auth` is a **branded function** set by `clerkMiddleware` — so when no
+  Clerk keys are present the middleware must be skipped entirely and
+  `requireAuth` must fail closed, otherwise tests/boots would throw.
+- Network round-trips to Clerk's JWKS broke offline tests — solved with
+  `CLERK_JWT_KEY` (PEM public key) so verification is local and deterministic.
+- Detect-sign-out loops: `GuestOnly` uses `isSignedIn` (not `userId`) and
+  redirects authenticated users to `/dashboard` as soon as the session loads —
+  avoids navigating before the session exists.
+
+**Status:** Phase 10 complete — Clerk auth end-to-end (UI → tokens → backend
+verify → profile sync → ownership), rate limiting in place, 69/69 smoke green,
+docs synchronized with the implementation. Deploying next should only need real
+Clerk keys + env vars.
+
+---
+
 ## 7. AI Agent Architecture
 
 ### 7.1 How the assistant stays safe
@@ -701,9 +776,13 @@ MongoDB + Mongoose. Document model: "everything I know about one person".
 | field | type | notes |
 |---|---|---|
 | name | String | required |
-| email | String | unique, lowercase |
-| passwordHash | String | bcrypt, never plaintext |
+| email | String | optional, default '' |
+| clerkUserId | String | **required, unique, indexed** — Clerk identity (`sub`) |
 | createdAt | Date | default now |
+
+The app never stores passwords. A `User` row is created/synced on first
+authenticated request via `findOrCreateAppUser`, which maps the Clerk
+`clerkUserId` to the app-level owner every other collection references.
 
 **leads**
 | field | type | notes |
@@ -754,17 +833,20 @@ is not provided, so the smoke suite and no-setup dev both work offline.
 
 ## 9. API Reference
 
-All endpoints are `/api/*`. Every route except `/api/health`,
-`/api/auth/register`, `/api/auth/login` and `/api/auth/logout` requires
+All endpoints are `/api/*`. Every route except `/api/health` and `/` requires
+a valid Clerk session — the frontend's `lib/api.js` sends the session token as
 `Authorization: Bearer <token>`.
 
 ### Auth
 | Method | Path | Body | Notes |
 |---|---|---|---|
-| POST | `/api/auth/register` | name, email, password | 201 + { token, user } |
-| POST | `/api/auth/login` | email, password | { token, user } |
-| GET | `/api/auth/me` | — | current user from token (auth required) |
-| POST | `/api/auth/logout` | — | client discards token |
+| GET | `/api/auth/me` | — | current user, resolved from the Clerk session (auth required) |
+
+Registration/sign-in/logout are handled entirely by Clerk's hosted flows on the
+frontend (`/login`, `/register`); the backend has no password endpoints.
+
+Everything below (Leads → AI) — plus `/api/auth/me` — requires a valid Clerk
+session; `/api/health` and `/` are public.
 
 ### Leads
 | Method | Path | Query/Body | Notes |
@@ -812,7 +894,8 @@ All endpoints are `/api/*`. Every route except `/api/health`,
 
 **Error shape everywhere:** `{ error: string, details?: object }`. Statuses:
 400 validation, 401 auth, 404 not found / not yours, 409 conflict (duplicate
-email), 500 internal, 502 AI provider failure.
+email), 413 request body too large, 429 rate limited, 500 internal, 502 AI
+provider failure.
 
 ---
 
@@ -821,23 +904,36 @@ email), 500 internal, 502 AI provider failure.
 ### Flow
 
 ```
-Register/Login → POST /api/auth/* → { token, user }  (JWT, HS256, secret from env)
-                          │
-    apiClient stores token in localStorage, sends header every request
-                          ▼
-Verify on boot → GET /api/auth/me → AuthContext restores session
-                          ▼
-Route guards redirect to /login when no valid session
+Client sign-in via Clerk flows (/login, /register) → Clerk issues a session
+                                                          │
+   ClerkTokenBridge feeds getToken() → lib/api.js sets Authorization: Bearer
+                                                          ▼
+Backend clerkMiddleware (getAuth) verifies the session token → clerkUserId
+                                                          ▼
+findOrCreateAppUser(clerkUserId, sessionClaims) -> app User doc -> req.user
+                                                          ▼
+Route guards redirect to /login until a valid session exists
 ```
 
 ### Implementation notes
 
-- Passwords hashed with **bcrypt (cost 10)** in a Mongoose pre-save hook — plain
-  passwords never reach the DB layer and never appear in logs.
-- `requireAuth` middleware verifies the JWT on every protected route and sets
-  `req.user`; controllers use that, never client-supplied `user`/owner.
-- JWT has an **expiry** (`JWT_EXPIRES_IN`, default `7d`). Refresh-token
-  rotation is not implemented yet (documented in §Security as a known limit).
+- Sessions are issued and verified by **Clerk** (`@clerk/express` on the
+  backend, `@clerk/clerk-react` on the frontend). The app never sees passwords
+  and no tokens are stored in `localStorage` — `lib/api.js` receives a
+  freshly-minted token on each request via `getToken()`.
+- `clerkMiddleware` runs only when `CLERK_SECRET_KEY` is set (a no-op
+  otherwise, so the API can still boot for tests/local work), and verifies the
+  token against the `CLERK_JWT_KEY` PEM public key when provided — so no
+  network round-trip is needed at runtime.
+- `findOrCreateAppUser` syncs a Clerk identity (`clerkUserId` = JWT `sub`) to
+  the in-app `User` row, preferring profile fields inside the signed session
+  claims, then falling back to the Clerk API, then placeholders offline.
+- Backend tokens include per-endpoint rate limiting: 30/min on `/api/auth/me`
+  and `/api/ai/*`. Old JWT fields (`JWT_SECRET`, `JWT_EXPIRES_IN`,
+  `passwordHash`, `bcryptjs`) were fully removed (fsck clean).
+- If no Clerk keys are configured, `requireAuth` **fails closed** (401) rather
+  than allowing anonymous access. In production `CLERK_SECRET_KEY` /
+  `CLERK_PUBLISHABLE_KEY` are required and validated at boot.
 
 ---
 
@@ -845,13 +941,19 @@ Route guards redirect to /login when no valid session
 
 ### Already in place
 
-- **bcrypt hashing** + no plaintext storage.
-- **JWT bearer auth** on every route; no anonymous data access. `JWT_SECRET`
-  comes from env; a dev-only default must be replaced in production.
+- **Clerk-managed credentials** — no password storage, hashing, or reset code
+  in this repo; sign-in/sign-up/2FA are handled by Clerk.
+- **Session auth on every route** — `clerkMiddleware` + `requireAuth` gate all
+  `/api/*` (except health); no anonymous data access. Fails closed when no
+  Clerk keys are set.
+- **Networkless verification** — optional `CLERK_JWT_KEY` (PEM public key)
+  lets the server verify tokens without a JWKS round-trip.
 - **Ownership at the query level** — `{ user: req.user.id }` on all selects and
   mutations; foreign/unowned IDs → 404 (no existence leak).
-- **Validation on every input** (email format, password rules, status enum,
-  required names) with uniform 400s and field-level `details`.
+- **Validation on every input** (email format, status enum, required names)
+  with uniform 400s and field-level `details`.
+- **Rate limiting** — fixed-window IP limiter (dependency-free) on `/api/auth/me`
+  (30/min) and `/api/ai/*` (30/min).
 - **Headers/CORS** — CORS locked to `CLIENT_URL`; JSON body limited to 1 MB.
   (A dedicated security-headers middleware (helmet-style) is not yet added —
   see known limits.)
@@ -861,37 +963,39 @@ Route guards redirect to /login when no valid session
 - **Whitelisted AI tools only** — delete/reassign/external actions impossible
   through AI.
 - **Error hygiene** — `{ error }` responses, no stack traces to clients
-  (`errorHandler` logs server-side only).
-- **Graceful shutdown** — production process handles SIGINT/SIGTERM with a
-  clean exit (in-memory Mongo is stopped at the end of the smoke suite).
+  (`errorHandler` logs server-side only); malformed JSON → 400, oversized
+  bodies → 413.
+- **Graceful shutdown** — SIGINT/SIGTERM stop the HTTP server, disconnect
+  Mongoose, and shut down the in-memory Mongo (if used).
 
 ### Known limits (documented, not yet fixed)
 
-- `JWT_SECRET` default exists only for local dev — deployment must set a strong
-  secret (README says so; `.env.example` lists it).
-- No refresh-token rotation or logout server-side invalidation.
-- No email verification, no password reset (needs email infra).
-- `localStorage` token storage (XSS-exposed); for production, use httpOnly
-  cookies or a secure store.
+- All `CLERK_*`/`GEMINI_API_KEY` values must be supplied in real deployments
+  — a missing `CLERK_SECRET_KEY` boots the server but locks the API down with
+  401s on every protected route.
 - No per-resource role checks beyond ownership (single-user MVP).
 - No dedicated security-headers middleware (e.g. helmet) yet.
-- Gemini model access stays behind the same JWT + ownership guard; a production
+- Gemini model access stays behind the same auth + ownership guard; a production
   deployment should also review API-key rotation.
 
 ---
 
 ## 12. Frontend Architecture
 
-- **`src/main.jsx`** mounts `<App/>`; **`App.jsx`** owns routes, `AuthProvider`,
-  lazy-loaded pages and the `Suspense` fallback.
-- **`context/AuthContext.jsx`** — session state, login/register/logout,
-  session restore via `GET /auth/me`, exposes the user to any component.
-- **`lib/api.js`** — single `api` client (fetch wrapper) that injects the bearer
-  token and normalizes `{ error, details }` responses; all pages talk to the
-  server through it.
+- **`src/main.jsx`** mounts `<App/>` inside `ClerkProvider` (publishable key from
+  `VITE_CLERK_PUBLISHABLE_KEY`); **`App.jsx`** owns routes + lazy pages.
+- **`context/ClerkTokenBridge.jsx`** — feeds Clerk's `getToken()` into
+  `lib/api.js` via `setSessionTokenProvider` on mount; renders nothing.
+- **Session state** comes from Clerk hooks (`useAuth`, `useUser`, `useClerk`)
+  — never stored in localStorage; sign-in/sign-up handled by Clerk's embedded
+  `<SignIn>`/`<SignUp>` flows on `/login` and `/register`.
+- **`lib/api.js`** — single `api` client (fetch wrapper) that attaches a
+  fresh Clerk session token and normalizes `{ error, details }` responses; all
+  pages talk to the server through it.
 - **`hooks/useAsync.js`** — one hook for loading/data/error; pages stay tiny.
 - **Route guards** — `GuestOnly` (redirect authed users away from
-  /login,/register) and `RequireAuth` (redirect anonymous users to /login).
+  /login,/register) and `RequireAuth` (redirect anonymous users to /login),
+  both built on Clerk `useAuth`.
 - **Pages:** Dashboard, Leads, LeadDetails, FollowUps, Settings, Login, Register.
 - **Components grouped by domain:** `layout/`, `auth/`, `leads/`, `ai/`,
   `dashboard/`, `activity/`, plus generic `ui/` (shadcn) and shared
@@ -936,10 +1040,11 @@ service → HTTP 404 automatically.
 **Target shape (not yet wired end-to-end in the repo):**
 
 - **Frontend** → static host (e.g. Vercel/Netlify): `npm run build` produces
-  `client/dist`; route via a SPA rewrite to `index.html`.
+  `client/dist`; route via a SPA rewrite to `index.html`; set
+  `VITE_CLERK_PUBLISHABLE_KEY`.
 - **Backend** → Node host (e.g. Render/Railway/Fly): run `server` with env vars
-  `MONGODB_URI`, `JWT_SECRET`, `GEMINI_API_KEY`, `PORT`, plus MongoDB Atlas or
-  self-hosted.
+  `MONGODB_URI`, `CLERK_SECRET_KEY`, `CLERK_PUBLISHABLE_KEY`, `GEMINI_API_KEY`,
+  `PORT`, `CLIENT_URL`; optionally `CLERK_JWT_KEY` to avoid JWKS network calls.
 - **CORS** — once separated, set `CLIENT_ORIGIN` for the API; in dev the Vite
   proxy already avoids CORS.
 - **Secrets** — never commit `.env`; set secrets in the platform's env
@@ -953,11 +1058,12 @@ before merging; keep a preview deployment for demo.
 ## 15. Testing
 
 - **`server/scripts/smoke.js`** — the main automated suite: boots an in-memory
-  Mongo + fresh Express app, then exercises the whole product flow (auth →
+  Mongo + fresh Express app, then exercises the whole product flow (Clerk auth →
   leads CRUD → follow-ups → dashboard → AI endpoints) asserting status codes,
-  payload shapes and JWT flow. Bootstrapped to boot only when the API key isn't
-  set (skips AI calls in mock moods; enable live AI with `GEMINI_API_KEY`).
-  Currently **green (55 assertions)**.
+  payload shapes, ownership isolation and auth edge cases. It mints its own
+  RS256 Clerk tokens with a throwaway keypair, so all 69 assertions run fully
+  offline (no Clerk network access; `GEMINI_API_KEY` forced off in the
+  "no key" cases). Currently **green (69 assertions)**.
 - **`npm run seed`** — inserts the demo dataset (`seed/demoData.js`) for manual
   exploration.
 - **Manual QA paths in README** — each major feature lists "try it" steps.
@@ -1039,9 +1145,9 @@ before merging; keep a preview deployment for demo.
 | Business logic | `server/src/services/` |
 | AI / Gemini | `server/src/services/geminiService.js`, `aiService.js`, `prompts.js`, `server/src/tools/` |
 | Models / schema | `server/src/models/` |
-| Auth logic | `server/src/controllers/auth.js`, `server/src/middleware/auth.js` |
+| Auth logic | `server/src/middleware/auth.js`, `server/src/services/userSync.js`, `server/src/config/clerk.js` |
 | Frontend routes & guards | `client/src/App.jsx`, `client/src/components/RouteGuards.jsx` |
-| Auth context / API client | `client/src/context/AuthContext.jsx`, `client/src/lib/api.js` |
+| Auth bridge / API client | `client/src/context/ClerkTokenBridge.jsx`, `client/src/lib/api.js` |
 | Dashboard + charts | `server/src/controllers/dashboard.js`, `client/src/pages/Dashboard.jsx` |
 | In-memory DB fallback | `server/src/config/db.js` |
 | Demo data | `server/src/seed/demoData.js`, `server/scripts/seed.js` |
@@ -1054,4 +1160,7 @@ before merging; keep a preview deployment for demo.
 **Phase 6** dashboard/polish → **Phase 7** AI assistant (analysis, reply,
 qualification, chat + safe tool actions) → **Phase 8** runtime fixes
 (login/register 400/404, MongoDB not-installed fallback, seed hang, 55-assertion
-smoke suite green). Next: deployment, notifications, or team mode.*
+smoke suite green) → **Phase 9** docs baseline + remote git → **Phase 10** Clerk
+auth (backend sessions + frontend sign-in, profile sync, rate limiting,
+69-assertion smoke suite green). Next after Phase 10: production deployment,
+notifications, or team mode.*

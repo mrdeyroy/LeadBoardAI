@@ -4,7 +4,7 @@ import { Loader2 } from 'lucide-react'
 
 import { AppShell } from '@/components/layout/AppShell'
 import { GuestOnly, RequireAuth } from '@/components/RouteGuards'
-import { AuthProvider } from '@/context/AuthContext'
+import { ClerkTokenBridge } from '@/context/ClerkTokenBridge'
 
 const Login = lazy(() => import('@/pages/Login'))
 const Register = lazy(() => import('@/pages/Register'))
@@ -29,17 +29,12 @@ function withSuspense(node) {
 
 function App() {
   return (
-    <AuthProvider>
+    <>
+      <ClerkTokenBridge />
       <BrowserRouter>
         <Routes>
-          <Route
-            path="/login"
-            element={<GuestOnly>{withSuspense(<Login />)}</GuestOnly>}
-          />
-          <Route
-            path="/register"
-            element={<GuestOnly>{withSuspense(<Register />)}</GuestOnly>}
-          />
+          <Route path="/login" element={<GuestOnly>{withSuspense(<Login />)}</GuestOnly>} />
+          <Route path="/register" element={<GuestOnly>{withSuspense(<Register />)}</GuestOnly>} />
           <Route element={<RequireAuth><AppShell /></RequireAuth>}>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={withSuspense(<Dashboard />)} />
@@ -51,7 +46,7 @@ function App() {
           <Route path="*" element={withSuspense(<NotFound />)} />
         </Routes>
       </BrowserRouter>
-    </AuthProvider>
+    </>
   )
 }
 

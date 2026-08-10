@@ -12,7 +12,7 @@ assistant. MVP is single-user; every row is owned by the authenticated user.
 
 - Frontend: React, Vite, Tailwind CSS v4, shadcn/ui, Recharts, Framer Motion
 - Backend: Node.js, Express, Mongoose, MongoDB (with in-memory fallback)
-- Auth: JWT (bcrypt-hashed passwords)
+- Auth: Clerk (`@clerk/express` backend, `@clerk/clerk-react` frontend)
 - AI: Google Gemini (`generateContent`, function calling)
 
 ## 3. Monorepo structure
@@ -33,12 +33,12 @@ server or backend logic into the client.
 ## 4. How to run
 
 - Dev: `npm run dev` at root (runs client on :5173, server on :5000 via
-  concurrently). No external DB required — falls back to an in-memory MongoDB;
-  demo user `demo@leadboard.ai / demo1234`.
+  concurrently). No external DB or auth keys required — falls back to an
+  in-memory MongoDB; Clerk login works with a test session if env keys are set.
 - Server only: `npm run dev` inside `server/`.
 - Client only: `npm run dev` inside `client/`.
 - Seed demo data: `npm run seed` inside `server/`.
-- Smoke test suite: `npm test` inside `server/` (55 assertions; run before
+- Smoke test suite: `npm test` inside `server/` (69 assertions; run before
   finishing work).
 - Build: `npm run build` (root → builds the client).
 
@@ -70,11 +70,14 @@ server or backend logic into the client.
 - Keep React concerns in `client/src`: pages, components, context, hooks, lib.
 - Use existing `ui/` primitives; put domain components in their own folders.
 - Route every page through `App.jsx` with route guards
-  (`ProtectedRoute`/`PublicOnlyRoute`).
+  (`RequireAuth`/`GuestOnly`).
 - All server calls go through `client/src/lib/api.js` (`apiClient`), never
   raw `fetch`.
 - Use `hooks/useAsync.js` for data fetching; render loading/error/empty states.
-- Use `AuthContext` for session state; never manage tokens outside it.
+- Own the session via Clerk hooks (`useAuth`, `useUser`, `useClerk`). The
+  `ClerkTokenBridge` feeds `getToken()` into `lib/api.js` via
+  `setSessionTokenProvider` — never store tokens in localStorage or manage
+  them manually.
 
 ## 8. Backend rules
 
@@ -110,11 +113,14 @@ server or backend logic into the client.
 
 ## 11. Security requirements
 
-- Never hardcode secrets/API keys. Use `server/.env` + env vars (`JWT_SECRET`,
-  `GEMINI_API_KEY`, `MONGODB_URI`). Commit only `server/.env.example` with
-  placeholders, never real values.
-- Passwords: bcrypt only, never plaintext; never echo them back.
-- All protected routes require a valid JWT via `requireAuth`.
+- Never hardcode secrets/API keys. Use `server/.env` + env vars
+  (`CLERK_SECRET_KEY`, `CLERK_PUBLISHABLE_KEY`, `GEMINI_API_KEY`,
+  `MONGODB_URI`). Commit only `.env.example` files (server + client) with
+  placeholders, never real values. Clerk keys must be set in production.
+- Passwords are handled entirely by Clerk; never store or echo passwords.
+- All protected routes require a valid Clerk session via `requireAuth`
+  (middleware reads `getAuth(req)` and resolves `req.user` to the app User
+  through `findOrCreateAppUser`).
 - Validate all inputs; uniform `{ message }` error shape; hide stack traces.
 - Prompt-injection defense: system prompts instruct model to ignore
   instructions embedded in lead/message content.

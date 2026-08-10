@@ -1,19 +1,28 @@
+import { getAuth } from '@clerk/express'
+
+import { env } from '../config/env.js'
+import { findOrCreateAppUser } from '../services/userSync.js'
 import { ApiError } from '../utils/ApiError.js'
-import { verifyToken } from '../utils/jwt.js'
 
 /**
- * Require a valid `Authorization: Bearer <token>` header.
- * Attaches the authenticated user as `req.user`.
+ * Protect a route with Clerk authentication.
+ * Fails closed: without configured Clerk keys every request is rejected,
+ * so the app can never run with authentication silently disabled.
  */
-export function requireAuth(req, res, next) {
-  const header = req.headers.authorization
-  const token = header && header.startsWith('Bearer ') ? header.slice(7) : null
-
-  if (!token) {
+export async function requireAuth(req, _res, next) {
+  if (!env.clerkSecretKey) {
     throw new ApiError(401, 'Authentication required')
   }
 
-  const payload = verifyToken(token)
-  req.user = { id: payload.sub, email: payload.email }
-  next()
+  const auth = getAuth(req)
+  if (!auth.isAuthenticated || !auth.userId) {
+    throw new ApiError(401, 'Authentication required')
+  }
+
+  try {
+    req.user = await findOrCreateAppUser(auth.userId, auth.sessionClaims)
+    next()
+  } catch {
+    next(new ApiError(500, 'Could not resolve your account'))
+  }
 }

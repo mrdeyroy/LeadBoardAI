@@ -45,7 +45,7 @@ export async function connectDB() {
     try {
       const counts = await seedDemoData()
       console.log(
-        `[db] demo data ready — log in with demo@leadboard.ai / demo1234 (${counts.leads} leads)`
+        `[db] demo data ready (${counts.leads} leads) — sign in via Clerk to use the app`
       )
     } catch (seedErr) {
       console.warn('[db] demo seeding skipped:', seedErr.message)

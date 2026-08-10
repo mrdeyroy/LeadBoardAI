@@ -31,7 +31,7 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useAuth } from '@/context/AuthContext'
+import { useUser } from '@clerk/clerk-react'
 import { useAsync } from '@/hooks/useAsync'
 import { api } from '@/lib/api'
 import { formatDate } from '@/lib/format'
@@ -90,7 +90,7 @@ function ChartCard({ data, loading }) {
 }
 
 export default function Dashboard() {
-  const { user } = useAuth()
+  const { user } = useUser()
   const { data, loading, error, reload } = useAsync(() => api('/dashboard'), [])
 
   const statCards = [
@@ -104,7 +104,7 @@ export default function Dashboard() {
     <div className="flex flex-col gap-6">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight">
-          {greeting(user?.name?.split(' ')[0] ?? 'there')}
+          {greeting(user?.firstName ?? user?.username ?? 'there')}
         </h2>
         <p className="text-sm text-muted-foreground">Here's what's happening with your leads.</p>
       </div>

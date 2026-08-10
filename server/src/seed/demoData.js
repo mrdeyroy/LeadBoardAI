@@ -5,10 +5,13 @@ import Lead from '../models/Lead.js'
 import FollowUp from '../models/FollowUp.js'
 import Activity from '../models/Activity.js'
 
-export const DEMO_CREDENTIALS = {
+// The demo dataset is owned by one application User that corresponds to a
+// Clerk sign-in. Seed it, then sign in with that Clerk account so the
+// app-user sync attaches the data to your real session.
+export const DEMO_CLERK_USER_ID = 'user_2demoLeadBoardAI'
+export const DEMO_PROFILE = {
   name: 'Demo User',
   email: 'demo@leadboard.ai',
-  password: 'demo1234',
 }
 
 // name, company, requirement, budget, source, status, createdDaysAgo
@@ -64,7 +67,7 @@ function hoursAfter(base, hours) {
  * Safe to run repeatedly — existing demo data is replaced.
  */
 export async function seedDemoData() {
-  const existing = await User.findOne({ email: DEMO_CREDENTIALS.email })
+  const existing = await User.findOne({ clerkUserId: DEMO_CLERK_USER_ID })
   if (existing) {
     await Activity.deleteMany({ user: existing._id })
     await FollowUp.deleteMany({ user: existing._id })
@@ -73,9 +76,9 @@ export async function seedDemoData() {
   }
 
   const user = await User.create({
-    name: DEMO_CREDENTIALS.name,
-    email: DEMO_CREDENTIALS.email,
-    passwordHash: DEMO_CREDENTIALS.password,
+    name: DEMO_PROFILE.name,
+    email: DEMO_PROFILE.email,
+    clerkUserId: DEMO_CLERK_USER_ID,
   })
 
   const leadDocs = LEAD_SEEDS.map(([name, company, requirement, budget, source, status, age], i) => {

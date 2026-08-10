@@ -1,7 +1,23 @@
+import { generateKeyPairSync } from 'node:crypto'
 import { MongoMemoryServer } from 'mongodb-memory-server'
 import mongoose from 'mongoose'
+import jwt from 'jsonwebtoken'
 
-process.env.JWT_SECRET = 'test-secret'
+// ---- Test auth: networkless Clerk verification ----------------------------
+// The app verifies Clerk session tokens using a `jwtKey` (PEM public key).
+// This harness generates its own RSA keypair, wires the public key in as
+// CLERK_JWT_KEY, and mints RS256-signed tokens with the private key. No
+// Clerk account or network call is required; the real `@clerk/express`
+// verification path is exercised end to end.
+const { privateKey, publicKey } = generateKeyPairSync('rsa', {
+  modulusLength: 2048,
+})
+const randomPair = generateKeyPairSync('rsa', { modulusLength: 2048 })
+const jwtKeyPem = publicKey.export({ type: 'spki', format: 'pem' })
+
+process.env.CLERK_SECRET_KEY = 'sk_test_2smokeSmokeSmokeSmokeSmokeSmokeSmokeSmoke'
+process.env.CLERK_PUBLISHABLE_KEY = 'pk_test_Y2xlcmsubGVhZGJvYXJkLmRldiQ'
+process.env.CLERK_JWT_KEY = jwtKeyPem
 // The harness must not depend on a real Gemini key: force the in-memory app
 // into the "AI provider not configured" path (deterministic, offline, cheap).
 process.env.GEMINI_API_KEY = ''
@@ -49,44 +65,76 @@ const request = async (method, path, { body, token } = {}) => {
   return { status: res.status, data }
 }
 
+// Mint a Clerk-style session token for a given user identity.
+// `extraClaims` can smuggle in fake user IDs / user profile data for tests.
+const makeToken = (clerkUserId, extraClaims = {}) => {
+  const now = Math.floor(Date.now() / 1000)
+  return jwt.sign(
+    {
+      azp: 'http://localhost:5173',
+      exp: now + 3600,
+      iat: now,
+      iss: 'https://smoke.clerk.accounts.dev',
+      nbf: now - 5,
+      sid: `sess_${clerkUserId}`,
+      sub: clerkUserId,
+      user: {
+        firstName: 'Demo',
+        lastName: 'User',
+        emailAddress: 'demo@example.com',
+      },
+      ...extraClaims,
+    },
+    privateKey,
+    { algorithm: 'RS256', header: { typ: 'JWT' } }
+  )
+}
+
+const DEMO_USER = 'user_2smokeDemo'
+const OTHER_USER = 'user_2smokeOther'
+const token = makeToken(DEMO_USER)
+const otherToken = makeToken(OTHER_USER, {
+  user: { firstName: 'Other', lastName: 'User', emailAddress: 'other@example.com' },
+})
+
 // ---- Auth ----
-const register = await request('POST', '/auth/register', {
-  body: { name: 'Demo User', email: 'demo@example.com', password: 'secret123' },
-})
-check('register returns 201', register.status === 201)
-check('register returns token + user', !!register.data?.token && register.data?.user?.email === 'demo@example.com')
-check('register hides passwordHash', register.data?.user?.passwordHash === undefined)
-
-const dup = await request('POST', '/auth/register', {
-  body: { name: 'Demo User', email: 'demo@example.com', password: 'secret123' },
-})
-check('duplicate register -> 409', dup.status === 409)
-
-const badRegister = await request('POST', '/auth/register', {
-  body: { name: '', email: 'nope', password: '123' },
-})
-check('invalid register -> 400', badRegister.status === 400 && !!badRegister.data?.details)
-
-const login = await request('POST', '/auth/login', {
-  body: { email: 'demo@example.com', password: 'secret123' },
-})
-check('login returns 200', login.status === 200 && !!login.data?.token)
-
-const badLogin = await request('POST', '/auth/login', {
-  body: { email: 'demo@example.com', password: 'wrong' },
-})
-check('wrong password -> 401', badLogin.status === 401)
-
-const token = login.data.token
-
-const me = await request('GET', '/auth/me', { token })
-check('me returns user', me.status === 200 && me.data.user.email === 'demo@example.com')
-
 const meNoToken = await request('GET', '/auth/me')
 check('me without token -> 401', meNoToken.status === 401)
 
-const meBadToken = await request('GET', '/auth/me', { token: 'not-a-token' })
-check('me with bad token -> 401', meBadToken.status === 401)
+const meBadToken = await request('GET', '/auth/me', { token: 'not-a-jwt' })
+check('me with garbage token -> 401', meBadToken.status === 401)
+
+const expiredToken = makeToken('user_2smokeExpired', {})
+const expClaims = jwt.decode(expiredToken)
+const expired = jwt.sign({ ...expClaims, exp: Math.floor(Date.now() / 1000) - 3600 }, privateKey, {
+  algorithm: 'RS256',
+})
+const meExpired = await request('GET', '/auth/me', { token: expired })
+check('me with expired token -> 401', meExpired.status === 401)
+
+const wrongKeyToken = makeToken('user_2smokeWrong')
+const wrongKeyPayload = jwt.decode(wrongKeyToken, { json: true })
+const wrongKeySigned = jwt.sign(wrongKeyPayload, randomPair.privateKey, { algorithm: 'RS256' })
+const meWrongKey = await request('GET', '/auth/me', { token: wrongKeySigned })
+check('token signed by wrong key -> 401', meWrongKey.status === 401)
+
+// Fake userId in the token must be ignored — identity comes from the verified `sub`.
+const meWithFakeClaim = await request('GET', '/auth/me', {
+  token: makeToken(DEMO_USER, { userId: 'user_2sneaky' }),
+})
+check(
+  'fake userId claim is ignored',
+  meWithFakeClaim.status === 200 && meWithFakeClaim.data?.user?.clerkUserId === DEMO_USER
+)
+
+const me = await request('GET', '/auth/me', { token })
+check('me returns synced app user', me.status === 200 && me.data?.user?.clerkUserId === DEMO_USER)
+check('me user has ownership id', !!me.data?.user?.id)
+
+const synced = await mongoose.model('User').findOne({ clerkUserId: DEMO_USER })
+check('app user auto-created from clerk identity', !!synced)
+check('no passwordHash field on app user', synced?.passwordHash === undefined)
+check('email synced from clerk claims', synced?.email === 'demo@example.com')
 
 // ---- Leads ----
 const noAuthLeads = await request('GET', '/leads')
@@ -114,9 +162,17 @@ check('create second lead -> 201', createSecond.status === 201 && createSecond.d
 
 const createBad = await request('POST', '/leads', { token, body: { name: '' } })
 check('create with empty name -> 400', createBad.status === 400)
+check('validation error exposes field details', !!createBad.data?.details)
 
 const createBadStatus = await request('POST', '/leads', { token, body: { name: 'X', status: 'Hot' } })
 check('create with bad status -> 400', createBadStatus.status === 400)
+
+const badJson = await fetch(base + '/leads', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+  body: '{not json',
+})
+check('malformed JSON body -> 400', badJson.status === 400)
 
 const { leads: listOne } = (await request('GET', '/leads?search=acme', { token })).data
 check('search finds acme', listOne.length === 1 && listOne[0].name === 'Acme Corp')
@@ -196,11 +252,13 @@ check('toggle follow-up complete', toggle.status === 200 && toggle.data.followUp
 const openAfter = await request('GET', '/followups?openOnly=true', { token })
 check('completed excluded from openOnly', openAfter.data.followUps.length === 0)
 
-// Second user (used for ownership checks)
-const otherReg = await request('POST', '/auth/register', {
-  body: { name: 'Other', email: 'other@example.com', password: 'other123' },
-})
-const otherToken = otherReg.data.token
+// ---- Second user (Clerk identity -> own app user + isolation) ----
+const otherMe = await request('GET', '/auth/me', { token: otherToken })
+check('second clerk identity syncs its own app user',
+  otherMe.status === 200 && otherMe.data?.user?.clerkUserId === OTHER_USER)
+
+const otherSynced = await mongoose.model('User').findOne({ clerkUserId: OTHER_USER })
+check('two app users are distinct', otherSynced && !otherSynced._id.equals(synced._id))
 
 // ---- AI tools (execution requires no Gemini key) ----
 const aiNoAuth = await request('POST', '/ai/actions', { body: { tool: 'addLeadNote', params: { leadId, content: 'x' } } })
@@ -261,7 +319,7 @@ check('analyze without key -> 500', noKeyAnalyze.status === 500 && noKeyAnalyze.
 const noKeyChat = await request('POST', '/ai/chat', { token, body: { leadId, message: 'What should I do next?' } })
 check('chat without key -> 500', noKeyChat.status === 500 && noKeyChat.data.error === 'Gemini API key not configured')
 
-// Second user isolation
+// ---- Ownership isolation (User A vs User B) ----
 const otherLead = await request('POST', '/leads', {
   token: otherToken,
   body: { name: "Other's Secret Lead" },
@@ -274,9 +332,66 @@ check('demo user cannot see other user lead -> 404', visible.status === 404)
 const otherList = await request('GET', '/leads', { token: otherToken })
 check('other user sees only own leads', otherList.data.pagination.total === 1)
 
-// delete lead
+const otherLeadId = otherLead.data.lead.id
+
+const otherPatchOurs = await request('PATCH', `/leads/${leadId}`, {
+  token: otherToken,
+  body: { status: 'Won' },
+})
+check('other user cannot modify our lead -> 404', otherPatchOurs.status === 404)
+
+const otherDeleteOurs = await request('DELETE', `/leads/${leadId}`, { token: otherToken })
+check('other user cannot delete our lead -> 404', otherDeleteOurs.status === 404)
+
+const otherFup = await request('POST', '/followups', {
+  token: otherToken,
+  body: { leadId, title: 'Poke at their lead', dueDate: '2026-08-30' },
+})
+check('other user cannot follow up our lead -> 404', otherFup.status === 404)
+
+const otherPatchOurFup = await request('PATCH', `/followups/${fupId}`, {
+  token: otherToken,
+  body: { completed: true },
+})
+check('other user cannot touch our follow-up -> 404', otherPatchOurFup.status === 404)
+
+const otherFupList = await request('GET', '/followups', { token: otherToken })
+check('other user sees only their follow-ups', otherFupList.data.followUps.length === 0)
+
+const otherLeadActs = await request('GET', `/leads/${leadId}/activities`, { token: otherToken })
+check('other user cannot read our lead activities -> 404', otherLeadActs.status === 404)
+
+const otherRecentActs = await request('GET', '/activities?limit=20', { token: otherToken })
+check(
+  'other user activity feed is isolated from our lead',
+  otherRecentActs.data.activities.length === 1 &&
+    !otherRecentActs.data.activities.some((a) => a.lead?.id === leadId)
+)
+
+const dashOther = await request('GET', '/dashboard', { token: otherToken })
+check('other user dashboard is isolated', dashOther.data.leads.total === 1)
+
+// ---- Rate limiting (AI endpoints) ----
+let limited = false
+for (let i = 0; i < 35; i += 1) {
+  const res = await request('POST', '/ai/actions', {
+    token,
+    body: { tool: 'updateLeadStatus', params: { leadId, status: 'Contacted' } },
+  })
+  if (res.status === 429) {
+    limited = true
+    break
+  }
+}
+check('ai endpoints are rate limited -> 429', limited === true)
+
+// ---- Public routes ----
+const health = await request('GET', '/health')
+check('health stays public', health.status === 200 && health.data.status === 'ok')
+
+// delete lead (owned)
 const del = await request('DELETE', `/leads/${leadId}`, { token })
-check('delete lead -> 200', del.status === 200)
+check('delete own lead -> 200', del.status === 200)
 const gone = await request('GET', `/leads/${leadId}`, { token })
 check('lead gone after delete', gone.status === 404)
 

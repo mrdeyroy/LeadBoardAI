@@ -8,7 +8,7 @@ AI assistant. This is a focused MVP — not an enterprise CRM.
 **Frontend** — React, Vite, Tailwind CSS, shadcn/ui, Lucide React
 **Backend** — Node.js, Express.js
 **Database** — MongoDB with Mongoose
-**Auth** — JWT (bearer tokens)
+**Auth** — Clerk (managed sign-in, sessions)
 **AI** — Gemini API (via whitelisted server-side tools)
 
 ## Project Structure
@@ -44,15 +44,14 @@ npm run dev
 
 **No MongoDB? No problem.** In development, if the configured `MONGODB_URI`
 is unreachable the server automatically boots an in-memory MongoDB
-(`mongodb-memory-server`), seeds demo data and prints:
+(`mongodb-memory-server`). **No Clerk keys? Also fine** — without
+`CLERK_SECRET_KEY` / `CLERK_PUBLISHABLE_KEY` the client shows a notice with
+`npm run dev`, and authenticated routes are protected until you add real
+keys. Add Clerk keys from the [Clerk dashboard](https://dashboard.clerk.com)
+(API Keys) and start or sign up with a test session to use the app.
 
-```
-[db] demo data ready — log in with demo@leadboard.ai / demo1234
-```
-
-So you can run `npm run dev` and log in immediately with
-`demo@leadboard.ai` / `demo1234`. Data in the in-memory DB resets when the
-server restarts. In production a real `MONGODB_URI` is always required.
+Data in the in-memory DB resets when the server restarts. In production a
+real `MONGODB_URI` is always required.
 
 `npm run dev` starts both applications:
 
@@ -81,7 +80,7 @@ client can call the API without CORS.
 | ---------------- | ------------------------------ |
 | `npm run dev`    | Watch mode (nodemon)           |
 | `npm start`      | Production start               |
-| `npm run seed`   | Seed demo data (demo@leadboard.ai / demo1234) |
+| `npm run seed`   | Seed demo data (Clerk demo user) |
 | `npm test`       | API integration smoke tests    |
 
 ## Environment Variables
@@ -93,8 +92,9 @@ client can call the API without CORS.
 | `PORT`          | API port                           | `5000`                           |
 | `MONGODB_URI`   | MongoDB connection string          | `mongodb://127.0.0.1:27017/leadboard` |
 | `CLIENT_URL`    | Allowed CORS origin                | `http://localhost:5173`          |
-| `JWT_SECRET`    | Auth secret (required in production) | —                              |
-| `JWT_EXPIRES_IN`| JWT lifetime (optional)            | `7d`                             |
+| `CLERK_SECRET_KEY` | Clerk secret key (required in production) | —                          |
+| `CLERK_PUBLISHABLE_KEY` | Clerk publishable key (required in production) | —                  |
+| `CLERK_JWT_KEY` | Optional PEM public key for networkless token verification | —   |
 | `GEMINI_API_KEY`| Gemini API key for the AI assistant | —                              |
 | `GEMINI_MODEL`  | Gemini model (optional)            | `gemini-2.5-flash`               |
 
@@ -102,20 +102,18 @@ client can call the API without CORS.
 
 | Variable        | Description                        |
 | --------------- | ---------------------------------- |
+| `VITE_CLERK_PUBLISHABLE_KEY` | Clerk publishable key (required to sign in) |
 | `VITE_API_URL`  | API base URL (optional; dev uses the Vite proxy) |
 
 Create a `.env` file from each `.env.example` — never commit real secrets.
 
 ## API Overview
 
-All routes except auth return `401` without `Authorization: Bearer <token>`.
+All routes except `/api/health` return `401` without a valid Clerk session.
 
 | Method   | Route                      | Description                          |
 | -------- | -------------------------- | ------------------------------------ |
-| POST     | `/api/auth/register`       | Create account → `{ token, user }`   |
-| POST     | `/api/auth/login`          | Login → `{ token, user }`            |
-| POST     | `/api/auth/logout`         | Logout (client discards token)       |
-| GET      | `/api/auth/me`             | Current user                         |
+| GET      | `/api/auth/me`             | Current user (from Clerk session)    |
 | GET      | `/api/leads`               | List: `?search=&status=&page=&limit=` |
 | POST     | `/api/leads`               | Create lead                          |
 | GET      | `/api/leads/:id`           | Get lead                             |
@@ -158,9 +156,11 @@ clear `500` while the rest of the API keeps working.
 
 ## Deploying
 
-- **Client** → Vercel: build command `npm run build`, output `client/dist`.
+- **Client** → Vercel: build command `npm run build`, output `client/dist`,
+  env `VITE_CLERK_PUBLISHABLE_KEY`.
 - **Server** → Render (web service): start command `npm start`, working
-  directory `server/`, set `MONGODB_URI`, `CLIENT_URL`, `JWT_SECRET`.
+  directory `server/`, set `MONGODB_URI`, `CLIENT_URL`, `CLERK_SECRET_KEY`,
+  `CLERK_PUBLISHABLE_KEY` (and `CLERK_JWT_KEY` to skip network round-trips).
 
 ## Status
 
@@ -181,7 +181,11 @@ clear `500` while the rest of the API keeps working.
   pattern)
 - ✅ **Phase 8** — Runtime fixes & zero-setup dev: `mongodb-memory-server`
   fallback, demo seed, 55-assertion smoke suite green
+- ✅ **Phase 9** — Documentation baseline & git history sync
+- ✅ **Phase 10** — Clerk authentication: `@clerk/express` backend sessions,
+  `@clerk/clerk-react` UI, profile sync via Clerk identity, rate limiting for
+  auth + AI, 69-assertion smoke suite green
 
-To try the app with populated data: `cd server && npm run seed`, then log in
-with `demo@leadboard.ai` / `demo1234`. The seed is idempotent — it replaces any
-existing demo data.
+To try the app: follow the quick-start above, add your Clerk keys, and sign in
+from the login page. To preload demo data (tied to the Clerk demo user):
+`cd server && npm run seed`.

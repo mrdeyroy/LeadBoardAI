@@ -1,35 +1,18 @@
 import { Router } from 'express'
 
-import { login, logout, me, register } from '../controllers/auth.js'
+import { me } from '../controllers/auth.js'
 import { requireAuth } from '../middleware/auth.js'
-import { asyncHandler } from '../utils/asyncHandler.js'
-import { EMAIL_PATTERN, trimFields, validateBody } from '../utils/validate.js'
+import { rateLimit } from '../middleware/rateLimit.js'
 
 const router = Router()
 
-router.post(
-  '/register',
-  trimFields(['name', 'email']),
-  validateBody({
-    name: { required: true, max: 100 },
-    email: { required: true, pattern: EMAIL_PATTERN, max: 254 },
-    password: { required: true, min: 6, max: 128 },
-  }),
-  register
+// Clerk owns sign-up/sign-in/sign-out. The only remaining auth endpoint
+// is an application-user sync/profile read, guarded like every other route.
+router.get(
+  '/me',
+  requireAuth,
+  rateLimit({ windowMs: 60_000, max: 30, name: 'auth' }),
+  me
 )
-
-router.post(
-  '/login',
-  trimFields(['email']),
-  validateBody({
-    email: { required: true, pattern: EMAIL_PATTERN, max: 254 },
-    password: { required: true },
-  }),
-  login
-)
-
-router.post('/logout', logout)
-
-router.get('/me', requireAuth, asyncHandler(me))
 
 export default router

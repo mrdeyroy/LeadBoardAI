@@ -1,8 +1,6 @@
 import { Navigate } from 'react-router-dom'
-
+import { useAuth } from '@clerk/clerk-react'
 import { Loader2 } from 'lucide-react'
-
-import { useAuth } from '@/context/AuthContext'
 
 export function FullPageLoader({ label = 'Loading…' }) {
   return (
@@ -14,15 +12,15 @@ export function FullPageLoader({ label = 'Loading…' }) {
 }
 
 export function RequireAuth({ children }) {
-  const { user, initializing } = useAuth()
-  if (initializing) return <FullPageLoader label="Checking your session…" />
-  if (!user) return <Navigate to="/login" replace />
+  const { isLoaded, isSignedIn } = useAuth()
+  if (!isLoaded) return <FullPageLoader label="Checking your session…" />
+  if (!isSignedIn) return <Navigate to="/login" replace />
   return children
 }
 
 export function GuestOnly({ children }) {
-  const { user, initializing } = useAuth()
-  if (initializing) return <FullPageLoader label="Loading…" />
-  if (user) return <Navigate to="/dashboard" replace />
+  const { isLoaded, isSignedIn } = useAuth()
+  if (!isLoaded) return <FullPageLoader label="Loading…" />
+  if (isSignedIn) return <Navigate to="/dashboard" replace />
   return children
 }
