@@ -54,9 +54,19 @@ export async function findOrCreateAppUser(clerkUserId, sessionClaims) {
 
   const profile = await resolveProfile(clerkUserId, sessionClaims)
 
-  return User.create({
+  const newUser = await User.create({
     clerkUserId,
     name: (profile.name || 'Unnamed user').slice(0, 100),
     email: (profile.email || '').slice(0, 254),
   })
+
+  // Auto-seed demo dataset for newly registered accounts so every user starts with demo data
+  try {
+    const { seedDemoDataForUser } = await import('../seed/demoData.js')
+    await seedDemoDataForUser(newUser)
+  } catch (err) {
+    console.warn('[userSync] Auto-seeding for new user skipped:', err.message)
+  }
+
+  return newUser
 }

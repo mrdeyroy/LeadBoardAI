@@ -35,13 +35,19 @@ const TIMELINES = ['Within a month', '1–2 months', 'Within 3 months', 'Within 
 const NOTES = {
   Qualified: 'Very responsive on WhatsApp, need to share a clear proposal this week.',
   Proposal: 'Asked for a detailed breakdown — send by end of week.',
-  Won: 'Signed the agreement. Ask for a testimonial after launch.',
-  Lost: 'Chose a different vendor. Keep in touch for future work.',
+  Contacted: 'Called twice, scheduled a follow-up call.',
+  New: 'Inbound lead, needs quick intro call.',
+  Won: 'Contract signed, kick-off meeting completed.',
+  Lost: 'Budget didn’t match, keeping in touch for future projects.',
 }
 
 function makeEmail(name, company) {
-  const domain = company.toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 16)
-  return `${name.toLowerCase().replace(/[^a-z]+/g, '.')}@${domain || 'gmail'}.com`
+  const handle = name.toLowerCase().replace(/[^a-z0-9]/g, '')
+  const domain = company
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '')
+    .slice(0, 15)
+  return `${handle}@${domain || 'example'}.com`
 }
 
 function daysAgo(days) {
@@ -62,25 +68,7 @@ function hoursAfter(base, hours) {
   return d
 }
 
-/**
- * Create the demo user, a set of realistic leads, follow-ups and activities.
- * Safe to run repeatedly — existing demo data is replaced.
- */
-export async function seedDemoData() {
-  const existing = await User.findOne({ clerkUserId: DEMO_CLERK_USER_ID })
-  if (existing) {
-    await Activity.deleteMany({ user: existing._id })
-    await FollowUp.deleteMany({ user: existing._id })
-    await Lead.deleteMany({ user: existing._id })
-    await User.deleteOne({ _id: existing._id })
-  }
-
-  const user = await User.create({
-    name: DEMO_PROFILE.name,
-    email: DEMO_PROFILE.email,
-    clerkUserId: DEMO_CLERK_USER_ID,
-  })
-
+export async function seedDemoDataForUser(user) {
   const leadDocs = LEAD_SEEDS.map(([name, company, requirement, budget, source, status, age], i) => {
     const createdAt = daysAgo(age)
     return {
@@ -184,7 +172,6 @@ export async function seedDemoData() {
     })
   }
   await FollowUp.insertMany(followUps, { timestamps: false })
-
   await Activity.insertMany(activities, { timestamps: false })
 
   return {
@@ -193,4 +180,26 @@ export async function seedDemoData() {
     followUps: followUps.length,
     activities: activities.length,
   }
+}
+
+/**
+ * Create the demo user, a set of realistic leads, follow-ups and activities.
+ * Safe to run repeatedly — existing demo data is replaced.
+ */
+export async function seedDemoData() {
+  const existing = await User.findOne({ clerkUserId: DEMO_CLERK_USER_ID })
+  if (existing) {
+    await Activity.deleteMany({ user: existing._id })
+    await FollowUp.deleteMany({ user: existing._id })
+    await Lead.deleteMany({ user: existing._id })
+    await User.deleteOne({ _id: existing._id })
+  }
+
+  const user = await User.create({
+    name: DEMO_PROFILE.name,
+    email: DEMO_PROFILE.email,
+    clerkUserId: DEMO_CLERK_USER_ID,
+  })
+
+  return seedDemoDataForUser(user)
 }
