@@ -208,6 +208,7 @@ export default function Outreach() {
         </div>
       ) : activeLeads.length === 0 ? (
         <EmptyState
+          icon={Send}
           title="No prospects found"
           description="No prospects match the selected outreach workspace filter."
         />

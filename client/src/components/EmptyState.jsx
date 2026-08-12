@@ -1,4 +1,6 @@
-export function EmptyState({ icon: Icon, title, description, action }) {
+import { Inbox } from 'lucide-react'
+
+export function EmptyState({ icon: Icon = Inbox, title, description, action }) {
   return (
     <div className="flex flex-col items-center gap-3 py-16 text-center">
       <div className="flex size-12 items-center justify-center rounded-full bg-muted text-muted-foreground">
