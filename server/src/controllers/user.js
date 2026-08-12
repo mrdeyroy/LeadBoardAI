@@ -1,11 +1,30 @@
+import Lead from '../models/Lead.js'
 import User from '../models/User.js'
+import { getPlanConfig } from '../config/plans.js'
+import { checkAndResetMonthlyUsage } from '../services/usageService.js'
 import { ApiError } from '../utils/ApiError.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 
 export const getProfile = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user.id)
+  let user = await User.findById(req.user.id)
   if (!user) throw new ApiError(404, 'User not found')
-  res.json({ user: user.toJSON() })
+
+  user = await checkAndResetMonthlyUsage(user)
+  const leadCount = await Lead.countDocuments({ user: req.user.id })
+  const planConfig = getPlanConfig(user.plan)
+
+  res.json({
+    user: user.toJSON(),
+    subscription: {
+      plan: user.plan,
+      planName: planConfig.name,
+      leadCount,
+      maxLeads: planConfig.maxLeads === Infinity ? null : planConfig.maxLeads,
+      aiUsageCount: user.aiUsageCount,
+      maxAiActionsPerMonth: planConfig.maxAiActionsPerMonth,
+      features: planConfig.features,
+    },
+  })
 })
 
 export const updateProfile = asyncHandler(async (req, res) => {

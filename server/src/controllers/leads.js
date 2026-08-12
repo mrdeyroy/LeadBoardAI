@@ -5,6 +5,7 @@ import {
   recordActivity,
 } from '../services/activityService.js'
 import { findOwnedLead } from '../services/leadService.js'
+import { checkFeatureAccess, checkLeadLimit } from '../services/usageService.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -67,6 +68,8 @@ export const listLeads = asyncHandler(async (req, res) => {
 })
 
 export const createLead = asyncHandler(async (req, res) => {
+  await checkLeadLimit(req.user.id, 1)
+
   const payload = {}
   for (const field of LEAD_UPDATE_FIELDS) {
     if (req.body[field] !== undefined) payload[field] = req.body[field]
@@ -151,6 +154,8 @@ function escapeCsvCell(val) {
 }
 
 export const exportLeads = asyncHandler(async (req, res) => {
+  await checkFeatureAccess(req.user.id, 'csvExport')
+
   const leads = await Lead.find({ user: req.user.id }).sort({ createdAt: -1 })
 
   const headers = [
@@ -189,6 +194,8 @@ export const exportLeads = asyncHandler(async (req, res) => {
 })
 
 export const importLeads = asyncHandler(async (req, res) => {
+  await checkFeatureAccess(req.user.id, 'csvImport')
+
   const rawLeads = Array.isArray(req.body.leads) ? req.body.leads : []
 
   const validLeads = []
@@ -227,6 +234,7 @@ export const importLeads = asyncHandler(async (req, res) => {
   }
 
   if (validLeads.length > 0) {
+    await checkLeadLimit(req.user.id, validLeads.length)
     const createdDocs = await Lead.insertMany(validLeads)
 
     const sampleLead = createdDocs[0]

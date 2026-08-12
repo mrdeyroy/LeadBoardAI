@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { SidebarTrigger } from '@/components/ui/sidebar'
 import { initials } from '@/lib/format'
+import { NotificationsDropdown } from './NotificationsDropdown'
 import { sectionTitle } from './nav'
 
 export function TopBar() {
@@ -37,7 +38,8 @@ export function TopBar() {
     <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-3 border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <SidebarTrigger className="-ml-1" />
       <h1 className="text-sm font-medium tracking-tight">{sectionTitle(pathname)}</h1>
-      <div className="ml-auto">
+      <div className="ml-auto flex items-center gap-2">
+        <NotificationsDropdown />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="h-9 gap-2 px-2">

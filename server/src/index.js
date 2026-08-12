@@ -2,10 +2,12 @@ import mongoose from 'mongoose'
 
 import { connectDB } from './config/db.js'
 import { env } from './config/env.js'
+import { startFollowUpScheduler, stopFollowUpScheduler } from './services/schedulerService.js'
 import app from './app.js'
 
 async function shutdown(signal, server) {
   console.log(`[api] received ${signal}, shutting down`)
+  stopFollowUpScheduler()
   const force = setTimeout(() => process.exit(1), 8000)
   force.unref()
 
@@ -29,6 +31,7 @@ async function main() {
   })
 
   await connectDB()
+  startFollowUpScheduler()
 
   const handle = (signal) => shutdown(signal, server)
   process.on('SIGTERM', handle)

@@ -13,6 +13,19 @@ const userSchema = new mongoose.Schema(
       defaultView: { type: String, enum: ['table', 'cards'], default: 'table' },
       theme: { type: String, enum: ['light', 'dark', 'system'], default: 'system' },
     },
+    plan: {
+      type: String,
+      enum: ['free', 'pro'],
+      default: 'free',
+    },
+    aiUsageCount: {
+      type: Number,
+      default: 0,
+    },
+    aiUsageResetDate: {
+      type: Date,
+      default: Date.now,
+    },
     clerkUserId: {
       type: String,
       required: true,

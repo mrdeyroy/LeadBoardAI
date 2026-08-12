@@ -140,6 +140,7 @@ export default function Settings() {
       <div className="flex items-center gap-2 border-b pb-2">
         {[
           { id: 'profile', label: 'Profile Details', icon: UserIcon },
+          { id: 'billing', label: 'Plan & Billing', icon: Building2 },
           { id: 'security', label: 'Security & Account', icon: Shield },
           { id: 'preferences', label: 'Preferences', icon: Sliders },
         ].map((tab) => {
@@ -257,6 +258,111 @@ export default function Settings() {
                 </CardContent>
               </Card>
             </form>
+          )}
+
+          {activeTab === 'billing' && (
+            <div className="flex flex-col gap-6">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between pb-2">
+                  <div>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      Current Subscription: <span className="uppercase text-primary font-bold">{profileQuery.data?.subscription?.planName || 'Free'} Plan</span>
+                    </CardTitle>
+                    <CardDescription>Plan limits, feature access, and monthly AI usage tracking.</CardDescription>
+                  </div>
+                  {profileQuery.data?.subscription?.plan === 'free' && (
+                    <Button onClick={() => toast.info('Stripe / Razorpay payment integration placeholder. Upgrade to Pro required.')}>
+                      Upgrade to Pro
+                    </Button>
+                  )}
+                </CardHeader>
+                <CardContent className="flex flex-col gap-6 pt-2">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="rounded-lg border p-4 flex flex-col gap-2">
+                      <div className="flex items-center justify-between text-xs font-medium">
+                        <span>Lead Capacity</span>
+                        <span className="text-muted-foreground">
+                          {profileQuery.data?.subscription?.leadCount} / {profileQuery.data?.subscription?.maxLeads ?? '∞'} Leads
+                        </span>
+                      </div>
+                      {profileQuery.data?.subscription?.maxLeads ? (
+                        <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                          <div
+                            className="h-full bg-primary transition-all"
+                            style={{
+                              width: `${Math.min(
+                                100,
+                                ((profileQuery.data?.subscription?.leadCount || 0) /
+                                  profileQuery.data?.subscription?.maxLeads) *
+                                  100
+                              )}%`,
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <p className="text-xs text-emerald-500 font-medium">Unlimited Leads Available</p>
+                      )}
+                    </div>
+
+                    <div className="rounded-lg border p-4 flex flex-col gap-2">
+                      <div className="flex items-center justify-between text-xs font-medium">
+                        <span>Monthly AI Actions</span>
+                        <span className="text-muted-foreground">
+                          {profileQuery.data?.subscription?.aiUsageCount} / {profileQuery.data?.subscription?.maxAiActionsPerMonth} Actions
+                        </span>
+                      </div>
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+                        <div
+                          className="h-full bg-indigo-500 transition-all"
+                          style={{
+                            width: `${Math.min(
+                              100,
+                              ((profileQuery.data?.subscription?.aiUsageCount || 0) /
+                                (profileQuery.data?.subscription?.maxAiActionsPerMonth || 1)) *
+                                100
+                            )}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-lg border bg-muted/20 p-4">
+                    <p className="text-xs font-semibold mb-3">Plan Feature Comparison</p>
+                    <div className="grid gap-2 sm:grid-cols-2 text-xs">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="size-4 text-emerald-500" />
+                        <span>Lead Pipeline & Follow-ups</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <CheckCircle2 className="size-4 text-emerald-500" />
+                        <span>In-App Overdue & Due Reminders</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {profileQuery.data?.subscription?.features?.csvExport ? (
+                          <CheckCircle2 className="size-4 text-emerald-500" />
+                        ) : (
+                          <Lock className="size-4 text-muted-foreground" />
+                        )}
+                        <span className={profileQuery.data?.subscription?.features?.csvExport ? '' : 'text-muted-foreground'}>
+                          CSV Export (Pro Only)
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {profileQuery.data?.subscription?.features?.csvImport ? (
+                          <CheckCircle2 className="size-4 text-emerald-500" />
+                        ) : (
+                          <Lock className="size-4 text-muted-foreground" />
+                        )}
+                        <span className={profileQuery.data?.subscription?.features?.csvImport ? '' : 'text-muted-foreground'}>
+                          CSV Import (Pro Only)
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
           )}
 
           {activeTab === 'security' && (

@@ -1277,3 +1277,103 @@ Route guards redirect to /login until a valid session exists
 | In-memory DB fallback | `server/src/config/db.js` |
 | Demo data | `server/src/seed/demoData.js`, `server/scripts/seed.js` |
 | Integration tests | `server/scripts/smoke.js` |
+
+---
+
+## Phase 17 — In-App Notifications & Scheduled Follow-up Workflows
+
+### Goal
+
+Transform follow-ups into a complete, proactive business workflow by introducing in-app notifications, periodic background job scheduling for due/overdue items, an email service abstraction, and notification management endpoints.
+
+### What Was Built / Changed
+
+1. **Notification Data Model (`server/src/models/Notification.js`)**:
+   - Fields: `user` (ref User), `lead` (ref Lead), `followUp` (ref FollowUp), `type` (`followup_due`, `followup_overdue`, `ai_suggestion`), `title`, `message`, `read` (boolean, default false), `readAt`, and `dedupKey` (sparse unique index for idempotency).
+2. **Notification Service Abstraction (`server/src/services/notificationService.js`)**:
+   - Enforces unique `dedupKey` insertion logic to guarantee duplicate prevention.
+   - Pluggable email provider interface (`setEmailProvider`) — if no email provider is configured or an email fails, in-app notifications still persist cleanly without throwing.
+   - Provides methods for user-scoped fetching (`getNotifications`), marking individual item read (`markAsRead`), and marking all unread read (`markAllAsRead`).
+3. **Scheduled Follow-up Processor (`server/src/services/schedulerService.js`)**:
+   - Periodic background worker (`startFollowUpScheduler`) scanning pending follow-ups.
+   - Automatically generates `followup_due` for follow-ups due today and `followup_overdue` for past-due follow-ups.
+   - Uses date-stamped `dedupKey` (`due_<fupId>_<YYYY-MM-DD>` / `overdue_<fupId>_<YYYY-MM-DD>`), making repeated scheduler execution 100% idempotent.
+4. **Notification Endpoints & Controllers (`server/src/routes/notifications.js`, `server/src/controllers/notifications.js`)**:
+   - `GET /api/notifications`: Returns user's notifications (sorted by newest) and `unreadCount`. Supports `?unreadOnly=true` and `?limit=`.
+   - `PATCH /api/notifications/:id/read`: Marks a specific notification as read.
+   - `PATCH /api/notifications/read-all`: Marks all unread notifications for the user as read.
+5. **Frontend UI (`client/src/components/layout/NotificationsDropdown.jsx` & `TopBar.jsx`)**:
+   - Added interactive notification bell button to `TopBar`.
+   - Shows live unread badge count with auto-refresh polling every 30 seconds.
+   - Dropdown displays list of notifications with relative timestamps, type icons, unread highlight styling, click-to-read, and "Mark all read" button.
+
+### Testing & Verification
+
+- Added 11 new integration test assertions to `server/scripts/smoke.js` (total **119 passed, 0 failed**).
+- Verified due today notification creation (`followup_due`).
+- Verified overdue notification creation (`followup_overdue`).
+- Verified duplicate prevention (scheduler re-run creates 0 duplicate notifications).
+- Verified strict ownership isolation (User B cannot see or mark User A's notifications read -> 404).
+- Verified `markAsRead` and `markAllAsRead` update `unreadCount` to 0.
+- Verified clean frontend production compilation (`npm run build`).
+
+---
+
+## Phase 18 — SaaS Plan-Based Usage Limits & Feature Gating
+
+### Goal
+
+Make LeadBoard AI SaaS-ready by introducing plan-based usage limits (Free vs. Pro), monthly AI tracking & auto-reset mechanisms, server-side feature gating, and subscription UI indicators.
+
+### Plan Architecture & Limits
+
+- **Free Tier (`free`)**:
+  - Max Leads: 50
+  - Monthly AI Actions: 20
+  - Features: Basic Analytics, In-App Notifications, Follow-ups
+  - Blocked Features: CSV Export, CSV Import, Advanced Analytics
+- **Pro Tier (`pro`)**:
+  - Max Leads: Unlimited (`Infinity`)
+  - Monthly AI Actions: 500
+  - Features: Full Lead Pipeline, CSV Export, CSV Import, Advanced Analytics, In-App Notifications
+
+### Server-Side Usage Flow & Enforcement
+
+1. **User Model Schema (`server/src/models/User.js`)**:
+   - Added `plan` enum (`free`, `pro`), `aiUsageCount` (number, default 0), and `aiUsageResetDate` (Date).
+2. **Centralized Usage Service (`server/src/services/usageService.js`)**:
+   - `checkLeadLimit(userId, count)`: Enforces `maxLeads` limit when creating or batch importing leads (returns `403 Forbidden` if exceeded).
+   - `checkAIUsage(userId)`: Checks monthly AI usage count against plan allowance (returns `429 Too Many Requests` if exceeded).
+   - `incrementAIUsage(userId)`: Increments `aiUsageCount` on successful AI execution.
+   - `checkAndResetMonthlyUsage(user)`: Automatic monthly reset routine evaluating if current calendar month has elapsed since `aiUsageResetDate`. Resets `aiUsageCount` to 0.
+   - `checkFeatureAccess(userId, featureName)`: Checks feature availability (e.g. `csvExport`, `csvImport`) and throws `403 Forbidden` if unavailable on plan.
+3. **Endpoint Enforcement**:
+   - `POST /api/leads` & `POST /api/leads/import`: Protected by `checkLeadLimit` and `checkFeatureAccess('csvImport')`.
+   - `GET /api/leads/export`: Protected by `checkFeatureAccess('csvExport')`.
+   - `POST /api/ai/*` (`/analyze`, `/reply`, `/qualify`, `/timing`, `/chat`, `/actions`): Protected by `checkAIUsage` and `incrementAIUsage`.
+4. **Subscription Profile Endpoint**:
+   - `GET /api/user/profile`: Returns normalized `user` object + `subscription` stats (`plan`, `planName`, `leadCount`, `maxLeads`, `aiUsageCount`, `maxAiActionsPerMonth`, `features`).
+
+### Frontend Feature Gating & UI
+
+- **Plan & Billing Settings**: Added a dedicated `Plan & Billing` tab in `Settings.jsx` showing progress bars for lead capacity and monthly AI actions, active feature badges, and an upgrade CTA.
+- **CSV Gating**: Gracefully handles `403` feature gating responses in `Leads.jsx` with informative toast messages explaining plan upgrade requirements.
+
+### Future Billing Integration Plan
+
+- **Replaceable Interface**: No hardcoded payment vendor SDKs in core services.
+- **Stripe / Razorpay Integration Path**:
+  - Add `stripeCustomerId` and `stripeSubscriptionId` fields to `User` schema.
+  - Implement webhook listener endpoint (`POST /api/webhooks/stripe`) to handle `customer.subscription.created`, `updated`, and `deleted` events.
+  - Upgrading to Pro will update `user.plan = 'pro'` via webhooks without modifying endpoint limit checking logic.
+
+### Testing & Verification
+
+- Added Phase 18 automated integration tests to `server/scripts/smoke.js` (total **128 passed, 0 failed**).
+- Verified `GET /api/user/profile` subscription payload structure.
+- Verified Free user CSV Export and Import are blocked with `403 Forbidden`.
+- Verified Free user AI actions are blocked with `429` once 20 actions are consumed.
+- Verified user usage is isolated (User B's usage is unaffected by User A's activity).
+- Verified automatic monthly usage reset logic (`checkAndResetMonthlyUsage`).
+- Verified lead limit enforcement at 50 leads for Free users and unlimited for Pro users.
+- Verified production build compilation via `npm run build` (`vite build` succeeded in `4.30s`).

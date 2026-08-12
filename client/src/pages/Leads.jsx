@@ -152,7 +152,10 @@ export default function LeadsPage() {
           Authorization: token ? `Bearer ${token}` : '',
         },
       })
-      if (!res.ok) throw new Error('Failed to export CSV')
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}))
+        throw new Error(errJson.error || `Failed to export CSV (${res.status})`)
+      }
       const blob = await res.blob()
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement('a')

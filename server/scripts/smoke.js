@@ -405,6 +405,11 @@ const badPref = await request('PATCH', '/user/preferences', {
 })
 check('invalid preferences -> 400', badPref.status === 400)
 
+// Set DEMO_USER to Pro for initial CSV feature testing
+const demoUserEarly = await mongoose.model('User').findOne({ clerkUserId: DEMO_USER })
+demoUserEarly.plan = 'pro'
+await demoUserEarly.save()
+
 // ---- CSV Export & Import ----
 const exportRes = await fetch(base + '/leads/export', {
   headers: { Authorization: `Bearer ${token}` },
@@ -424,7 +429,19 @@ const importRes = await request('POST', '/leads/import', {
 })
 check('csv import -> 200 with importedCount', importRes.status === 200 && importRes.data.importedCount === 2 && importRes.data.skippedCount === 1)
 
-// ---- Sorting & Source Filtering ----
+// ---- CSV import edge cases ----
+const importNonArray = await request('POST', '/leads/import', { token, body: { leads: 'not-an-array' } })
+check('csv import non-array body treated as empty -> importedCount 0', importNonArray.status === 200 && importNonArray.data.importedCount === 0)
+
+const importAllInvalid = await request('POST', '/leads/import', {
+  token,
+  body: { leads: [{ name: '' }, { name: '   ' }, null] },
+})
+check('csv import all-invalid rows -> importedCount 0, skippedCount 3', importAllInvalid.status === 200 && importAllInvalid.data.importedCount === 0 && importAllInvalid.data.skippedCount === 3)
+
+// Reset DEMO_USER to Free plan for subsequent feature gating tests
+demoUserEarly.plan = 'free'
+await demoUserEarly.save()
 const sortedLeads = await request('GET', '/leads?sortBy=name&sortOrder=asc', { token })
 check('leads sorting by name', sortedLeads.status === 200 && sortedLeads.data.leads.length >= 2)
 
@@ -508,15 +525,7 @@ check('preferences bad theme -> 400', badTheme.status === 400)
 const goodPrefs = await request('PATCH', '/user/preferences', { token, body: { itemsPerPage: 10, defaultView: 'table', theme: 'light' } })
 check('preferences all valid -> 200', goodPrefs.status === 200 && goodPrefs.data.user.preferences.theme === 'light')
 
-// ---- CSV import edge cases ----
-const importNonArray = await request('POST', '/leads/import', { token, body: { leads: 'not-an-array' } })
-check('csv import non-array body treated as empty -> importedCount 0', importNonArray.status === 200 && importNonArray.data.importedCount === 0)
 
-const importAllInvalid = await request('POST', '/leads/import', {
-  token,
-  body: { leads: [{ name: '' }, { name: '   ' }, null] },
-})
-check('csv import all-invalid rows -> importedCount 0, skippedCount 3', importAllInvalid.status === 200 && importAllInvalid.data.importedCount === 0 && importAllInvalid.data.skippedCount === 3)
 
 // ---- Dashboard sourceCounts shape ----
 const dashShape = await request('GET', '/dashboard', { token })
@@ -558,6 +567,122 @@ for (let i = 0; i < 35; i += 1) {
   }
 }
 check('ai endpoints are rate limited -> 429', limited === true)
+
+// ---- Notifications & Scheduler (Phase 17) ----
+const { processScheduledFollowUps } = await import('../src/services/schedulerService.js')
+
+// Create a due today follow-up and an overdue follow-up for DEMO_USER
+const todayStr = new Date().toISOString().split('T')[0]
+const dueTodayFup = await request('POST', '/followups', {
+  token,
+  body: { leadId, title: 'Call client today', dueDate: todayStr },
+})
+check('create due today follow-up', dueTodayFup.status === 201)
+
+const pastDate = new Date()
+pastDate.setDate(pastDate.getDate() - 3)
+const pastStr = pastDate.toISOString().split('T')[0]
+const overdueFup = await request('POST', '/followups', {
+  token,
+  body: { leadId, title: 'Missed proposal review', dueDate: pastStr },
+})
+check('create overdue follow-up', overdueFup.status === 201)
+
+// Run scheduler job manually to process follow-ups
+await processScheduledFollowUps()
+
+const notifs = await request('GET', '/notifications', { token })
+check('get notifications returns list & unread count', notifs.status === 200 && notifs.data.notifications.length >= 2 && notifs.data.unreadCount >= 2)
+check('due notification created with type followup_due', notifs.data.notifications.some((n) => n.type === 'followup_due' && n.title.includes('Call client today')))
+check('overdue notification created with type followup_overdue', notifs.data.notifications.some((n) => n.type === 'followup_overdue' && n.title.includes('Missed proposal review')))
+
+// Test duplicate prevention (idempotency)
+const countBefore = notifs.data.notifications.length
+await processScheduledFollowUps()
+const notifsAfter = await request('GET', '/notifications', { token })
+check('duplicate prevention: re-running scheduler creates no extra notifications', notifsAfter.data.notifications.length === countBefore)
+
+// Test ownership isolation on notifications
+const otherNotifs = await request('GET', '/notifications', { token: otherToken })
+check('ownership isolation: other user cannot see DEMO_USER notifications', otherNotifs.status === 200 && otherNotifs.data.notifications.length === 0)
+
+const targetNotifId = notifs.data.notifications[0].id
+const otherMarkRead = await request('PATCH', `/notifications/${targetNotifId}/read`, { token: otherToken })
+check('ownership isolation: other user cannot mark DEMO_USER notification read -> 404', otherMarkRead.status === 404)
+
+// Test mark as read
+const markReadRes = await request('PATCH', `/notifications/${targetNotifId}/read`, { token })
+check('mark single notification as read -> 200', markReadRes.status === 200 && markReadRes.data.notification.read === true)
+
+const markAllReadRes = await request('PATCH', '/notifications/read-all', { token })
+check('mark all notifications as read -> 200', markAllReadRes.status === 200)
+
+const notifsAllRead = await request('GET', '/notifications', { token })
+check('unread count is 0 after markAllAsRead', notifsAllRead.status === 200 && notifsAllRead.data.unreadCount === 0)
+
+// ---- SaaS Usage Limits & Feature Gating (Phase 18) ----
+const { checkAndResetMonthlyUsage } = await import('../src/services/usageService.js')
+const User = mongoose.model('User')
+
+// Check profile subscription payload shape
+const profSub = await request('GET', '/user/profile', { token })
+check('profile includes subscription details', profSub.status === 200 && profSub.data.subscription?.plan === 'free' && profSub.data.subscription?.maxLeads === 50)
+
+// Feature gating: CSV export and import are Pro only for Free users
+const exportGated = await request('GET', '/leads/export', { token })
+check('free user CSV export blocked -> 403', exportGated.status === 403 && exportGated.data.error.includes('csvExport'))
+
+const importGated = await request('POST', '/leads/import', { token, body: { leads: [{ name: 'Test' }] } })
+check('free user CSV import blocked -> 403', importGated.status === 403 && importGated.data.error.includes('csvImport'))
+
+// AI Usage Limit & Increment for Free user (max 20)
+const demoUserDoc = await User.findOne({ clerkUserId: DEMO_USER })
+demoUserDoc.plan = 'free'
+demoUserDoc.aiUsageCount = 20
+await demoUserDoc.save()
+
+const aiExceeded = await request('POST', '/ai/actions', {
+  token,
+  body: { tool: 'updateLeadStatus', params: { leadId, status: 'Contacted' } },
+})
+check('AI endpoint blocked when monthly limit reached -> 429', aiExceeded.status === 429 && Boolean(aiExceeded.data.error))
+
+// Ownership isolation on usage: OTHER_USER is unaffected by DEMO_USER's AI usage limit
+const otherUserDoc = await User.findOne({ clerkUserId: OTHER_USER })
+check('other user usage is independent of demo user', otherUserDoc.aiUsageCount === 0)
+
+// Test Monthly Usage Reset
+const pastResetDate = new Date()
+pastResetDate.setMonth(pastResetDate.getMonth() - 2)
+demoUserDoc.aiUsageResetDate = pastResetDate
+await demoUserDoc.save()
+
+await checkAndResetMonthlyUsage(demoUserDoc)
+check('monthly reset resets aiUsageCount to 0 for a new month', demoUserDoc.aiUsageCount === 0)
+
+// Lead Limit enforcement (max 50 for Free)
+const currentLeadCount = await mongoose.model('Lead').countDocuments({ user: demoUserDoc._id })
+// Fill lead count up to 50
+const fillLeads = []
+for (let i = currentLeadCount; i < 50; i++) {
+  fillLeads.push({ user: demoUserDoc._id, name: `Bulk Fill Lead ${i}`, status: 'New' })
+}
+if (fillLeads.length > 0) {
+  await mongoose.model('Lead').insertMany(fillLeads)
+}
+
+const leadLimitExceeded = await request('POST', '/leads', { token, body: { name: 'One Lead Too Many' } })
+check('lead creation blocked when plan limit reached -> 403', leadLimitExceeded.status === 403 && leadLimitExceeded.data.error.includes('limit reached'))
+
+// Upgrade DEMO_USER to Pro plan
+demoUserDoc.plan = 'pro'
+await demoUserDoc.save()
+
+const proLeadCreated = await request('POST', '/leads', { token, body: { name: 'Pro Lead Created' } })
+check('pro user can exceed 50 leads', proLeadCreated.status === 201)
+
+const proExportRes = await request('GET', '/leads/export', { token })
+check('pro user CSV export allowed -> 200', proExportRes.status === 200)
 
 // ---- Public routes ----
 const health = await request('GET', '/health')

@@ -12,6 +12,7 @@ import dashboardRouter from './routes/dashboard.js'
 import followUpsRouter from './routes/followups.js'
 import healthRouter from './routes/health.js'
 import leadsRouter from './routes/leads.js'
+import notificationsRouter from './routes/notifications.js'
 import userRouter from './routes/user.js'
 
 const app = express()
@@ -37,7 +38,9 @@ app.use('/api', healthRouter)
 app.use('/api/auth', authRouter)
 app.use('/api/user', userRouter)
 app.use('/api/leads', leadsRouter)
+app.use('/api/notifications', notificationsRouter)
 app.use('/api', activitiesRouter)
+
 app.use('/api/followups', followUpsRouter)
 app.use('/api', dashboardRouter)
 app.use('/api/ai', aiRouter)
