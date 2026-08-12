@@ -25,6 +25,7 @@ function AnimatedOutlet() {
 
 export function AppShell() {
   useEffect(() => {
+    applyTheme()
     api('/user/profile')
       .then((data) => {
         if (data?.user?.preferences?.theme) {

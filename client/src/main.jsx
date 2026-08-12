@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { ClerkProvider } from '@clerk/clerk-react'
 import './index.css'
+import '@/lib/theme'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import App from './App.jsx'
 

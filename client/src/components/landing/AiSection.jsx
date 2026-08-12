@@ -71,7 +71,7 @@ export function AiSection() {
             <div className="space-y-3.5 text-xs">
               {/* User Prompt */}
               <div className="flex justify-end">
-                <div className="flex items-center gap-2 rounded-xl bg-foreground text-background px-3.5 py-2 max-w-[85%] font-medium">
+                <div className="flex items-center gap-2 rounded-xl bg-foreground text-background px-3.5 py-2 max-w-[95%] sm:max-w-[85%] font-medium">
                   <User className="size-3.5 shrink-0 opacity-80" />
                   <span>"Which leads should I follow up with today?"</span>
                 </div>
@@ -79,7 +79,7 @@ export function AiSection() {
 
               {/* AI Response */}
               <div className="flex justify-start">
-                <div className="rounded-xl border border-border/80 bg-muted/30 p-3.5 max-w-[90%] space-y-2 text-foreground">
+                <div className="rounded-xl border border-border/80 bg-muted/30 p-3.5 max-w-[98%] sm:max-w-[90%] space-y-2 text-foreground">
                   <p className="font-semibold text-foreground">I recommend prioritizing ABC Dental first today.</p>
                   <p className="text-muted-foreground text-[11px] leading-relaxed">
                     ABC Dental replied to your cold email 2 days ago asking about website redesign pricing. Their status is currently "Replied".

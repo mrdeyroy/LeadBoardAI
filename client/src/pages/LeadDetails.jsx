@@ -243,15 +243,15 @@ export default function LeadDetails() {
             </Link>
           </Button>
           <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-2xl font-semibold tracking-tight">{lead.name}</h2>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-xl sm:text-2xl font-semibold tracking-tight">{lead.name}</h2>
               <StatusBadge status={lead.status} />
             </div>
             {lead.company && <p className="text-sm text-muted-foreground">{lead.company}</p>}
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Select value={lead.status} onValueChange={changeStatus}>
             <SelectTrigger className="w-36 h-9 text-xs">
               <SelectValue />

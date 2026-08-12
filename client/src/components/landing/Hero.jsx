@@ -33,7 +33,7 @@ export function Hero() {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.1 }}
-          className="mx-auto max-w-4xl text-4xl font-bold tracking-tight text-foreground sm:text-5xl lg:text-6xl leading-[1.1]"
+          className="mx-auto max-w-4xl text-3xl font-bold tracking-tight text-foreground sm:text-5xl lg:text-6xl leading-[1.15]"
         >
           Turn scattered prospects into a <span className="underline decoration-border/80 underline-offset-8">sales pipeline that moves.</span>
         </motion.h1>
@@ -43,7 +43,7 @@ export function Hero() {
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.2 }}
-          className="mx-auto mt-6 max-w-2xl text-base sm:text-lg text-muted-foreground leading-relaxed"
+          className="mx-auto mt-6 max-w-2xl text-sm sm:text-lg text-muted-foreground leading-relaxed"
         >
           LeadBoard AI helps agencies and founders manage prospects, follow-ups, and agency outreach with an intelligent, action-gated AI assistant.
         </motion.p>
@@ -55,13 +55,13 @@ export function Hero() {
           transition={{ duration: 0.5, delay: 0.3 }}
           className="mt-8 flex flex-wrap items-center justify-center gap-3"
         >
-          <Link to="/register">
-            <Button size="lg" className="rounded-full px-6 text-sm font-semibold shadow-md">
+          <Link to="/register" className="w-full sm:w-auto">
+            <Button size="lg" className="w-full sm:w-auto rounded-full px-6 text-sm font-semibold shadow-md">
               Start Free <ArrowRight className="ml-2 size-4" />
             </Button>
           </Link>
-          <a href="#workflow">
-            <Button variant="outline" size="lg" className="rounded-full px-6 text-sm font-medium border-border/80 bg-card hover:bg-muted">
+          <a href="#workflow" className="w-full sm:w-auto">
+            <Button variant="outline" size="lg" className="w-full sm:w-auto rounded-full px-6 text-sm font-medium border-border/80 bg-card hover:bg-muted">
               See How It Works
             </Button>
           </a>
@@ -72,19 +72,19 @@ export function Hero() {
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7, delay: 0.4 }}
-          className="mt-14 mx-auto max-w-5xl rounded-[16px] border border-border/80 bg-card p-3 sm:p-4 shadow-xl text-left"
+          className="mt-10 sm:mt-14 mx-auto max-w-5xl rounded-[16px] border border-border/80 bg-card p-2.5 sm:p-4 shadow-xl text-left"
         >
           {/* Top Bar Mockup Header */}
-          <div className="flex items-center justify-between border-b border-border/60 pb-3 px-2">
-            <div className="flex items-center gap-2">
-              <div className="flex gap-1.5">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-3 px-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="flex gap-1.5 shrink-0">
                 <span className="size-3 rounded-full bg-border" />
                 <span className="size-3 rounded-full bg-border/60" />
                 <span className="size-3 rounded-full bg-border/40" />
               </div>
-              <span className="ml-2 text-xs font-semibold text-muted-foreground">app.leadboardai.com/dashboard</span>
+              <span className="ml-1.5 text-xs font-semibold text-muted-foreground truncate max-w-[160px] sm:max-w-none">app.leadboardai.com/dashboard</span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
               <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-[10px] font-bold text-foreground">
                 <Trophy className="size-3" /> Win Rate: 42.8%
               </span>

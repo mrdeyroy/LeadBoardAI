@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useClerk, useUser } from '@clerk/clerk-react'
 import {
   Building2,
@@ -44,6 +44,8 @@ export default function Settings() {
   const { user: clerkUser } = useUser()
   const clerk = useClerk()
   const [activeTab, setActiveTab] = useState('profile')
+  const tabContainerRef = useRef(null)
+  const tabRefs = useRef({})
 
   const profileQuery = useAsync(() => api('/user/profile'), [])
 
@@ -64,6 +66,22 @@ export default function Settings() {
   const [savingPref, setSavingPref] = useState(false)
 
   const dbUser = profileQuery.data?.user
+
+  // Auto-scroll active tab pill into view on change
+  useEffect(() => {
+    const container = tabContainerRef.current
+    const activeEl = tabRefs.current[activeTab]
+    if (container && activeEl) {
+      const containerWidth = container.offsetWidth
+      const elLeft = activeEl.offsetLeft
+      const elWidth = activeEl.offsetWidth
+      const targetScroll = elLeft - containerWidth / 2 + elWidth / 2
+      container.scrollTo({
+        left: Math.max(0, targetScroll),
+        behavior: 'smooth',
+      })
+    }
+  }, [activeTab])
 
   useEffect(() => {
     if (dbUser) {
@@ -141,7 +159,7 @@ export default function Settings() {
         <p className="text-sm text-muted-foreground">Manage your workspace profile, account security, and CRM preferences.</p>
       </div>
 
-      <div className="flex items-center gap-2 border-b pb-2">
+      <div ref={tabContainerRef} className="flex items-center gap-1.5 border-b pb-2 overflow-x-auto scrollbar-none snap-x w-full justify-start">
         {[
           { id: 'profile', label: 'Profile Details', icon: UserIcon },
           { id: 'billing', label: 'Plan & Billing', icon: Building2 },
@@ -152,9 +170,10 @@ export default function Settings() {
           return (
             <button
               key={tab.id}
+              ref={(el) => (tabRefs.current[tab.id] = el)}
               onClick={() => setActiveTab(tab.id)}
               className={cn(
-                'inline-flex items-center gap-2 rounded-md px-3.5 py-2 text-xs font-medium transition-colors',
+                'inline-flex items-center gap-2 rounded-md px-3.5 py-2 text-xs font-medium transition-colors shrink-0 snap-center',
                 activeTab === tab.id
                   ? 'bg-primary text-primary-foreground shadow-xs'
                   : 'text-muted-foreground hover:bg-muted hover:text-foreground'

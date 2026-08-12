@@ -579,7 +579,8 @@ check('ai endpoints are rate limited -> 429', limited === true)
 const { processScheduledFollowUps } = await import('../src/services/schedulerService.js')
 
 // Create a due today follow-up and an overdue follow-up for DEMO_USER
-const todayStr = new Date().toISOString().split('T')[0]
+const dToday = new Date()
+const todayStr = `${dToday.getFullYear()}-${String(dToday.getMonth() + 1).padStart(2, '0')}-${String(dToday.getDate()).padStart(2, '0')}`
 const dueTodayFup = await request('POST', '/followups', {
   token,
   body: { leadId, title: 'Call client today', dueDate: todayStr },
@@ -588,7 +589,7 @@ check('create due today follow-up', dueTodayFup.status === 201)
 
 const pastDate = new Date()
 pastDate.setDate(pastDate.getDate() - 3)
-const pastStr = pastDate.toISOString().split('T')[0]
+const pastStr = `${pastDate.getFullYear()}-${String(pastDate.getMonth() + 1).padStart(2, '0')}-${String(pastDate.getDate()).padStart(2, '0')}`
 const overdueFup = await request('POST', '/followups', {
   token,
   body: { leadId, title: 'Missed proposal review', dueDate: pastStr },
