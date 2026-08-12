@@ -766,6 +766,68 @@ check('agency CSV import backward compatible -> 200', agencyCsvImport.status ===
 const otherUserOutreachFilter = await request('GET', '/leads?websiteStatus=Outdated%20Website', { token: otherToken })
 check('ownership isolation: other user cannot see demo user agency leads', otherUserOutreachFilter.status === 200 && !otherUserOutreachFilter.data.leads.some((l) => l.id === agencyLeadId))
 
+// ---- Phase 21 Daily Sales Workspace & Bulk Operations ----
+// 1. Pipeline Status Transitions (Researched, Replied, Meeting)
+const resStatusP1 = await request('PATCH', `/leads/${agencyLeadId}`, { token, body: { status: 'Researched' } })
+check('transition to Researched status -> 200', resStatusP1.status === 200 && resStatusP1.data.lead.status === 'Researched')
+
+const resStatusP2 = await request('PATCH', `/leads/${agencyLeadId}`, { token, body: { status: 'Replied' } })
+check('transition to Replied status -> 200', resStatusP2.status === 200 && resStatusP2.data.lead.status === 'Replied')
+
+const resStatusP3 = await request('PATCH', `/leads/${agencyLeadId}`, { token, body: { status: 'Meeting' } })
+check('transition to Meeting status -> 200', resStatusP3.status === 200 && resStatusP3.data.lead.status === 'Meeting')
+
+// 2. Outreach Analytics Calculation (replyRate, meetingRate, closeRate)
+const dashAnalytics = await request('GET', '/dashboard', { token })
+check('outreach analytics contains rates', dashAnalytics.status === 200 &&
+  typeof dashAnalytics.data.outreachSummary?.replyRate === 'number' &&
+  typeof dashAnalytics.data.outreachSummary?.meetingRate === 'number' &&
+  typeof dashAnalytics.data.outreachSummary?.closeRate === 'number')
+
+// 3. Bulk Update Operations (channel update, mark contacted, schedule follow-up, change status)
+const lead1Res = await request('POST', '/leads', { token, body: { name: 'Bulk Target Alpha', status: 'New' } })
+const lead2Res = await request('POST', '/leads', { token, body: { name: 'Bulk Target Beta', status: 'Researched' } })
+const targetIds = [lead1Res.data.lead.id, lead2Res.data.lead.id]
+
+const bulkChanRes = await request('POST', '/leads/bulk-update', {
+  token,
+  body: {
+    leadIds: targetIds,
+    action: 'update_outreach_channel',
+    payload: { outreachChannel: 'Instagram' },
+  },
+})
+check('bulk update outreach channel -> 200', bulkChanRes.status === 200 && bulkChanRes.data.updatedCount === 2)
+
+const bulkContactRes = await request('POST', '/leads/bulk-update', {
+  token,
+  body: {
+    leadIds: targetIds,
+    action: 'mark_contacted',
+  },
+})
+check('bulk mark contacted -> 200', bulkContactRes.status === 200 && bulkContactRes.data.updatedCount === 2)
+
+const bulkFollowUpRes = await request('POST', '/leads/bulk-update', {
+  token,
+  body: {
+    leadIds: targetIds,
+    action: 'schedule_followup',
+    payload: { dueDate: new Date().toISOString(), title: 'Batch follow up' },
+  },
+})
+check('bulk schedule follow-up -> 200', bulkFollowUpRes.status === 200 && bulkFollowUpRes.data.updatedCount === 2)
+
+// 4. Ownership Isolation on Bulk Actions (otherUser cannot bulk update demo user leads)
+const bulkOtherUserRes = await request('POST', '/leads/bulk-update', {
+  token: otherToken,
+  body: {
+    leadIds: targetIds,
+    action: 'mark_contacted',
+  },
+})
+check('ownership isolation: other user bulk update returns 404', bulkOtherUserRes.status === 404)
+
 // ---- Public routes ----
 const health = await request('GET', '/health')
 check('health stays public', health.status === 200 && health.data.status === 'ok')

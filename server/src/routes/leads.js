@@ -1,6 +1,7 @@
 import { Router } from 'express'
 
 import {
+  bulkUpdateLeads,
   createLead,
   deleteLead,
   exportLeads,
@@ -47,6 +48,7 @@ const bodyFields = Object.keys(updateSchema)
 router.get('/', listLeads)
 router.get('/export', exportLeads)
 router.post('/import', importLeads)
+router.post('/bulk-update', bulkUpdateLeads)
 router.post('/', trimFields(bodyFields), validateBody(createSchema), createLead)
 router.get('/:id', getLead)
 router.patch('/:id', trimFields(bodyFields), validateBody(updateSchema), updateLead)

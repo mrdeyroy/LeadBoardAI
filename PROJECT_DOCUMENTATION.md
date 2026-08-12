@@ -1426,7 +1426,51 @@ Extended the `Lead` Mongoose schema (`server/src/models/Lead.js`) with agency-fo
 
 - Added Phase 20 integration tests to `server/scripts/smoke.js` (total **136 passed, 0 failed**).
 - Verified agency lead creation, field updates, and activity timeline logging.
-- Verified agency prospect filters (`websiteStatus`, `outreachChannel`, `industry`).
 - Verified backward-compatible CSV import with fallback defaults.
 - Verified strict user ownership isolation across agency fields and outreach filters.
 - Verified clean production build execution (`npm run build`).
+
+---
+
+## Phase 21 — Agency Daily Sales Workspace & Bulk Operations
+
+### Goal
+
+Transform the Outreach view into a practical daily sales workspace for agency cold prospecting with an extended status pipeline, bulk selection operations, automated analytics conversion rates, and a prioritized "Needs Attention" queue.
+
+### Extended Pipeline & Backend Enhancements
+
+1. **Extended Pipeline Statuses (`server/src/models/Lead.js`, `client/src/lib/leads.js`)**:
+   - Expanded `LEAD_STATUSES` to 9 stages: `New` → `Researched` → `Contacted` → `Replied` → `Qualified` → `Meeting` → `Proposal` → `Won` / `Lost`.
+   - Added badge styling & chart colors for `Researched` (#64748b), `Replied` (#6366f1), and `Meeting` (#14b8a6) while preserving 100% backward compatibility with existing lead status logic.
+2. **Bulk Update Endpoint (`server/src/controllers/leads.js`, `server/src/routes/leads.js`)**:
+   - Implemented `POST /api/leads/bulk-update` supporting `update_outreach_channel`, `mark_contacted`, `mark_replied`, `schedule_followup`, and `change_status`.
+   - Enforced strict ownership isolation: only modifies leads belonging to `req.user.id` (returns `404` if unowned).
+   - Created individual activity timeline records for every updated lead in the batch.
+3. **Outreach Analytics Conversion Calculations (`server/src/controllers/dashboard.js`)**:
+   - Calculated dynamic funnel metrics: `contacted`, `replied`, `meetings`, `proposals`, `won`.
+   - Computed conversion rates:
+     - `replyRate`: `(replied / contacted) * 100`
+     - `meetingRate`: `(meetings / replied) * 100`
+     - `closeRate`: `(won / contacted) * 100`
+
+### Frontend Daily Sales Workspace (`client/src/pages/Outreach.jsx`)
+
+1. **"Today's Outreach" View**:
+   - Displays prospects needing action today: uncontacted (`!lastContactedAt` or status `New`/`Researched`), follow-ups due today, or overdue follow-ups.
+2. **"Needs Attention" Priority Banner**:
+   - Light-weight banner highlighting overdue follow-ups, `Replied` (unqualified), `Qualified` (no meeting scheduled), and `Proposal` (missing follow-up).
+3. **Bulk Selection & Confirmation Toolbar**:
+   - Checkboxes on prospect cards & select-all toggle.
+   - Sticky bulk action toolbar (`Update Channel`, `Mark Contacted`, `Schedule Follow-up`) requiring an explicit confirmation dialog before execution.
+4. **Prospect Card Quick Actions**:
+   - Added 6 instant action controls: `Mark Contacted`, `Mark Replied`, `Remind` (Schedule Follow-up), `Status Dropdown`, `Details Link`, and `AI Outreach Advisor` modal.
+
+### Testing & Verification
+
+- Added Phase 21 integration tests to `server/scripts/smoke.js` (total **144 passed, 0 failed**).
+- Verified status pipeline transitions (`Researched`, `Replied`, `Meeting`).
+- Verified outreach analytics calculations and conversion rate formulas.
+- Verified bulk update operations (`POST /api/leads/bulk-update`).
+- Verified strict ownership isolation on bulk updates (User B cannot update User A's leads -> 404).
+- Verified clean production compilation (`npm run build`).

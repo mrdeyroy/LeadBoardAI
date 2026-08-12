@@ -11,6 +11,7 @@ import {
 } from '../services/activityService.js'
 import { findOwnedLead } from '../services/leadService.js'
 import { checkFeatureAccess, checkLeadLimit } from '../services/usageService.js'
+import { ApiError } from '../utils/ApiError.js'
 import { asyncHandler } from '../utils/asyncHandler.js'
 
 const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -372,5 +373,124 @@ export const importLeads = asyncHandler(async (req, res) => {
   res.status(200).json({
     importedCount: validLeads.length,
     skippedCount,
+  })
+})
+
+export const bulkUpdateLeads = asyncHandler(async (req, res) => {
+  const { leadIds, action, payload } = req.body
+
+  if (!Array.isArray(leadIds) || leadIds.length === 0) {
+    throw new ApiError(400, 'leadIds must be a non-empty array')
+  }
+
+  if (!action || typeof action !== 'string') {
+    throw new ApiError(400, 'action is required')
+  }
+
+  const leads = await Lead.find({ _id: { $in: leadIds }, user: req.user.id })
+
+  if (leads.length === 0) {
+    throw new ApiError(404, 'No matching owned leads found')
+  }
+
+  const updatedLeads = []
+
+  for (const lead of leads) {
+    if (action === 'update_outreach_channel') {
+      const channel = payload?.outreachChannel
+      if (!channel || !OUTREACH_CHANNELS.includes(channel)) {
+        throw new ApiError(400, 'Invalid outreachChannel parameter')
+      }
+      const prev = lead.outreachChannel
+      lead.outreachChannel = channel
+      await lead.save()
+
+      await recordActivity({
+        userId: req.user.id,
+        leadId: lead._id,
+        type: 'outreach_channel_changed',
+        message: `Outreach channel set to ${channel}`,
+        metadata: { from: prev, to: channel, bulk: true },
+      })
+    } else if (action === 'mark_contacted') {
+      const now = new Date()
+      lead.lastContactedAt = now
+      if (lead.status === 'New' || lead.status === 'Researched') {
+        lead.status = 'Contacted'
+      }
+      await lead.save()
+
+      await recordActivity({
+        userId: req.user.id,
+        leadId: lead._id,
+        type: 'website_status_changed',
+        message: 'Marked as contacted',
+        metadata: { lastContactedAt: now.toISOString(), bulk: true },
+      })
+    } else if (action === 'mark_replied') {
+      const now = new Date()
+      lead.status = 'Replied'
+      if (!lead.lastContactedAt) {
+        lead.lastContactedAt = now
+      }
+      await lead.save()
+
+      await recordActivity({
+        userId: req.user.id,
+        leadId: lead._id,
+        type: 'status_changed',
+        message: 'Marked prospect as replied',
+        metadata: { to: 'Replied', bulk: true },
+      })
+    } else if (action === 'schedule_followup') {
+      const dueDate = payload?.dueDate ? new Date(payload.dueDate) : null
+      if (!dueDate || Number.isNaN(dueDate.getTime())) {
+        throw new ApiError(400, 'Valid dueDate required for scheduling follow-up')
+      }
+      const title = payload?.title?.trim() || 'Outreach follow-up'
+
+      const fup = await FollowUp.create({
+        user: req.user.id,
+        lead: lead._id,
+        title,
+        dueDate,
+      })
+
+      lead.nextFollowUpAt = dueDate
+      await lead.save()
+
+      await recordActivity({
+        userId: req.user.id,
+        leadId: lead._id,
+        type: 'followup_created',
+        message: `Follow-up "${title}" scheduled for ${dueDate.toISOString().split('T')[0]}`,
+        metadata: { followupId: fup._id.toString(), dueDate: dueDate.toISOString(), bulk: true },
+      })
+    } else if (action === 'change_status') {
+      const status = payload?.status
+      if (!status || !LEAD_STATUSES.includes(status)) {
+        throw new ApiError(400, 'Invalid status parameter')
+      }
+      const prev = lead.status
+      lead.status = status
+      await lead.save()
+
+      await recordActivity({
+        userId: req.user.id,
+        leadId: lead._id,
+        type: 'status_changed',
+        message: `Status updated to ${status}`,
+        metadata: { from: prev, to: status, bulk: true },
+      })
+    } else {
+      throw new ApiError(400, `Unknown bulk action: ${action}`)
+    }
+
+    updatedLeads.push(lead.toJSON())
+  }
+
+  res.json({
+    updatedCount: updatedLeads.length,
+    leads: updatedLeads,
   })
 })

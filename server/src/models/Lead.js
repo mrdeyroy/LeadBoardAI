@@ -2,8 +2,11 @@ import mongoose from 'mongoose'
 
 export const LEAD_STATUSES = [
   'New',
+  'Researched',
   'Contacted',
+  'Replied',
   'Qualified',
+  'Meeting',
   'Proposal',
   'Won',
   'Lost',

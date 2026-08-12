@@ -61,6 +61,23 @@ export const getDashboard = asyncHandler(async (req, res) => {
     count: row.count,
   }))
 
+  const contacted = await Lead.countDocuments({
+    user: userId,
+    $or: [
+      { status: { $in: ['Contacted', 'Replied', 'Qualified', 'Meeting', 'Proposal', 'Won'] } },
+      { lastContactedAt: { $ne: null } },
+    ],
+  })
+
+  const replied = (byStatus.Replied || 0) + (byStatus.Qualified || 0) + (byStatus.Meeting || 0) + (byStatus.Proposal || 0) + (byStatus.Won || 0)
+  const meetings = (byStatus.Meeting || 0) + (byStatus.Proposal || 0) + (byStatus.Won || 0)
+  const proposals = (byStatus.Proposal || 0) + (byStatus.Won || 0)
+  const won = byStatus.Won || 0
+
+  const replyRate = contacted > 0 ? Number(((replied / contacted) * 100).toFixed(1)) : 0
+  const meetingRate = replied > 0 ? Number(((meetings / replied) * 100).toFixed(1)) : 0
+  const closeRate = contacted > 0 ? Number(((won / contacted) * 100).toFixed(1)) : 0
+
   res.json({
     leads: {
       total,
@@ -70,15 +87,18 @@ export const getDashboard = asyncHandler(async (req, res) => {
     },
     outreachSummary: {
       totalProspects: total,
-      contacted: byStatus.Contacted,
-      replied: byStatus.Qualified,
-      meetings: byStatus.Qualified,
-      proposals: byStatus.Proposal,
-      won: byStatus.Won,
+      contacted,
+      replied,
+      meetings,
+      proposals,
+      won,
+      replyRate,
+      meetingRate,
+      closeRate,
     },
     statusCounts: LEAD_STATUSES.map((status) => ({
       status,
-      count: byStatus[status],
+      count: byStatus[status] || 0,
     })),
     sourceCounts,
     pendingFollowUps: pendingFollowUps.map(toFollowUpJSON),
