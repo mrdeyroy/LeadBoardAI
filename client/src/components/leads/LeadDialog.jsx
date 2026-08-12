@@ -21,13 +21,18 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { ApiError, api } from '@/lib/api'
-import { emptyLead, LEAD_STATUSES, SOURCES } from '@/lib/leads'
+import { emptyLead, LEAD_STATUSES, OUTREACH_CHANNELS, SOURCES, WEBSITE_STATUSES } from '@/lib/leads'
 
 const FIELDS = [
-  ['name', 'Name'],
-  ['company', 'Company'],
-  ['email', 'Email'],
-  ['phone', 'Phone'],
+  ['name', 'Prospect / Lead Name'],
+  ['company', 'Company / Business Name'],
+  ['contactPerson', 'Contact Person'],
+  ['email', 'Email Address'],
+  ['phone', 'Phone Number'],
+  ['website', 'Website URL'],
+  ['industry', 'Industry / Niche'],
+  ['websiteStatus', 'Website Status'],
+  ['outreachChannel', 'Outreach Channel'],
   ['source', 'Source'],
   ['status', 'Status'],
   ['budget', 'Budget'],
@@ -112,6 +117,32 @@ export function LeadDialog({ open, onOpenChange, lead, onSaved }) {
                       {LEAD_STATUSES.map((status) => (
                         <SelectItem key={status} value={status}>
                           {status}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : key === 'websiteStatus' ? (
+                  <Select value={form.websiteStatus || 'No Website'} onValueChange={(value) => setForm((p) => ({ ...p, websiteStatus: value }))}>
+                    <SelectTrigger id={`lead-${key}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {WEBSITE_STATUSES.map((ws) => (
+                        <SelectItem key={ws} value={ws}>
+                          {ws}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : key === 'outreachChannel' ? (
+                  <Select value={form.outreachChannel || 'Cold Email'} onValueChange={(value) => setForm((p) => ({ ...p, outreachChannel: value }))}>
+                    <SelectTrigger id={`lead-${key}`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {OUTREACH_CHANNELS.map((oc) => (
+                        <SelectItem key={oc} value={oc}>
+                          {oc}
                         </SelectItem>
                       ))}
                     </SelectContent>

@@ -7,6 +7,22 @@ export const LEAD_STATUSES = [
   'Lost',
 ]
 
+export const WEBSITE_STATUSES = [
+  'No Website',
+  'Outdated Website',
+  'Good Website',
+  'Redesign Opportunity',
+]
+
+export const OUTREACH_CHANNELS = [
+  'Cold Email',
+  'Phone',
+  'WhatsApp',
+  'Instagram',
+  'Referral',
+  'Other',
+]
+
 export const STATUS_STYLES = {
   New: 'bg-blue-100 text-blue-700',
   Contacted: 'bg-violet-100 text-violet-700',
@@ -30,12 +46,19 @@ export const SOURCES = ['Website', 'WhatsApp', 'Instagram', 'Phone', 'Referral',
 export const emptyLead = {
   name: '',
   company: '',
+  contactPerson: '',
   email: '',
   phone: '',
+  website: '',
+  industry: '',
+  websiteStatus: 'No Website',
+  outreachChannel: 'Cold Email',
   source: '',
   requirement: '',
   budget: '',
   timeline: '',
   status: 'New',
+  lastContactedAt: '',
+  nextFollowUpAt: '',
   notes: '',
 }

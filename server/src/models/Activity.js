@@ -7,6 +7,9 @@ export const ACTIVITY_TYPES = [
   'ai_analysis',
   'followup_created',
   'ai_action',
+  'website_status_changed',
+  'outreach_channel_changed',
+  'next_followup_updated',
 ]
 
 const activitySchema = new mongoose.Schema(

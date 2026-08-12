@@ -9,6 +9,7 @@ import { ClerkTokenBridge } from '@/context/ClerkTokenBridge'
 const Login = lazy(() => import('@/pages/Login'))
 const Register = lazy(() => import('@/pages/Register'))
 const Dashboard = lazy(() => import('@/pages/Dashboard'))
+const Outreach = lazy(() => import('@/pages/Outreach'))
 const Leads = lazy(() => import('@/pages/Leads'))
 const LeadDetails = lazy(() => import('@/pages/LeadDetails'))
 const FollowUps = lazy(() => import('@/pages/FollowUps'))
@@ -44,6 +45,7 @@ function App() {
           <Route element={<RequireAuth><AppShell /></RequireAuth>}>
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={withSuspense(<Dashboard />)} />
+            <Route path="/outreach" element={withSuspense(<Outreach />)} />
             <Route path="/leads" element={withSuspense(<Leads />)} />
             <Route path="/leads/:id" element={withSuspense(<LeadDetails />)} />
             <Route path="/follow-ups" element={withSuspense(<FollowUps />)} />

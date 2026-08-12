@@ -1377,3 +1377,56 @@ Make LeadBoard AI SaaS-ready by introducing plan-based usage limits (Free vs. Pr
 - Verified automatic monthly usage reset logic (`checkAndResetMonthlyUsage`).
 - Verified lead limit enforcement at 50 leads for Free users and unlimited for Pro users.
 - Verified production build compilation via `npm run build` (`vite build` succeeded in `4.30s`).
+
+---
+
+## Phase 20 — Agency Cold-Outreach & Prospecting Workflow
+
+### Goal
+
+Adapt LeadBoard AI for real agency cold-outreach workflows without altering existing CRM core capabilities. Enable tracking prospect business details, website audit statuses, cold outreach channels, and dedicated outreach workflow views.
+
+### Agency Data Model Extensions
+
+Extended the `Lead` Mongoose schema (`server/src/models/Lead.js`) with agency-focused prospecting fields:
+
+- **`contactPerson`**: Contact name / key decision maker at target business (String, max 200).
+- **`website`**: Prospect business website URL (String, max 300).
+- **`industry`**: Target business niche / industry category (String, max 100).
+- **`websiteStatus`**: Prospect audit classification (`'No Website'`, `'Outdated Website'`, `'Good Website'`, `'Redesign Opportunity'`). Default: `'No Website'`.
+- **`outreachChannel`**: Primary outreach channel (`'Cold Email'`, `'Phone'`, `'WhatsApp'`, `'Instagram'`, `'Referral'`, `'Other'`). Default: `'Cold Email'`.
+- **`lastContactedAt`**: Date timestamp of most recent contact attempt.
+- **`nextFollowUpAt`**: Date timestamp of upcoming scheduled outreach follow-up.
+
+### Controller & Route Enhancements
+
+1. **Leads Controller & Validation (`server/src/controllers/leads.js`, `server/src/routes/leads.js`)**:
+   - Updated validation schemas (`createSchema`, `updateSchema`) to validate all agency fields and dates.
+   - Enhanced `listLeads` to support searching across `contactPerson`, `website`, `industry`, and filtering by `websiteStatus`, `outreachChannel`, `industry`, and date ranges (`nextFollowUp=today|overdue|pending`).
+   - Extended `exportLeads` and `importLeads` to handle 18 CSV columns with fallback defaults for legacy CSV imports.
+2. **Outreach Activity Logging (`server/src/models/Activity.js`)**:
+   - Added `website_status_changed`, `outreach_channel_changed`, and `next_followup_updated` enum values to `ACTIVITY_TYPES`.
+   - Logged timeline events whenever agency status/channel/follow-up properties are modified.
+3. **Dashboard Aggregation (`server/src/controllers/dashboard.js`)**:
+   - Added `outreachSummary` metrics object returning counts for `totalProspects`, `contacted`, `replied`, `meetings`, `proposals`, and `won`.
+
+### Frontend Outreach Workspace & UI
+
+1. **Outreach Workspace Page (`client/src/pages/Outreach.jsx` & `/outreach` route)**:
+   - Added dedicated `Outreach` view with 5 workflow tabs: `Today's Outreach`, `Pending Outreach`, `Recently Contacted`, `Follow-ups`, and `Hot Leads`.
+   - Built live search and multi-select filter bars for Website Status, Outreach Channel, and Lead Status.
+   - Provided instant "Mark Contacted Today" action buttons and audit status badges on prospect cards.
+2. **Lead Details & Overview Card Updates (`client/src/pages/LeadDetails.jsx` & `LeadDialog.jsx`)**:
+   - Added an **Outreach Management** card on lead details page with inline quick controls for `websiteStatus`, `outreachChannel`, `lastContactedAt`, and `nextFollowUpAt`.
+   - Updated `Lead Overview` card and `LeadDialog` form inputs to allow capturing agency prospect details.
+3. **Dashboard Compact Summary (`client/src/pages/Dashboard.jsx`)**:
+   - Rendered a compact **Outreach Conversion Summary** funnel widget highlighting prospect conversion stages.
+
+### Testing & Verification
+
+- Added Phase 20 integration tests to `server/scripts/smoke.js` (total **136 passed, 0 failed**).
+- Verified agency lead creation, field updates, and activity timeline logging.
+- Verified agency prospect filters (`websiteStatus`, `outreachChannel`, `industry`).
+- Verified backward-compatible CSV import with fallback defaults.
+- Verified strict user ownership isolation across agency fields and outreach filters.
+- Verified clean production build execution (`npm run build`).

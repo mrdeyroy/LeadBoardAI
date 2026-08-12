@@ -1,7 +1,8 @@
-import { CalendarClock, LayoutDashboard, Settings, Users } from 'lucide-react'
+import { CalendarClock, LayoutDashboard, Send, Settings, Users } from 'lucide-react'
 
 export const NAV_ITEMS = [
   { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { to: '/outreach', label: 'Outreach Workspace', icon: Send },
   { to: '/leads', label: 'Leads', icon: Users },
   { to: '/follow-ups', label: 'Follow-ups', icon: CalendarClock },
 ]

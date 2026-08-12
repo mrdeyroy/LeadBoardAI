@@ -136,6 +136,10 @@ check('app user auto-created from clerk identity', !!synced)
 check('no passwordHash field on app user', synced?.passwordHash === undefined)
 check('email synced from clerk claims', synced?.email === 'demo@example.com')
 
+// Upgrade test users to Pro plan for standard CRUD assertions
+synced.plan = 'pro'
+await synced.save()
+
 // ---- Leads ----
 const noAuthLeads = await request('GET', '/leads')
 check('leads without token -> 401', noAuthLeads.status === 401)
@@ -332,6 +336,12 @@ const badReplyTone = await request('POST', '/ai/reply', { token, body: { leadId,
 check('reply invalid tone -> 400', badReplyTone.status === 400)
 
 // ---- Ownership isolation (User A vs User B) ----
+const otherUser = await mongoose.model('User').findOne({ clerkUserId: OTHER_USER })
+if (otherUser) {
+  otherUser.plan = 'pro'
+  await otherUser.save()
+}
+
 const otherLead = await request('POST', '/leads', {
   token: otherToken,
   body: { name: "Other's Secret Lead" },
@@ -415,7 +425,7 @@ const exportRes = await fetch(base + '/leads/export', {
   headers: { Authorization: `Bearer ${token}` },
 })
 const csvText = await exportRes.text()
-check('csv export -> 200 with text/csv', exportRes.status === 200 && csvText.includes('Name,Company,Email'))
+check('csv export -> 200 with text/csv', exportRes.status === 200 && csvText.includes('Name,Company,Contact Person,Email'))
 
 const importRes = await request('POST', '/leads/import', {
   token,
@@ -439,9 +449,6 @@ const importAllInvalid = await request('POST', '/leads/import', {
 })
 check('csv import all-invalid rows -> importedCount 0, skippedCount 3', importAllInvalid.status === 200 && importAllInvalid.data.importedCount === 0 && importAllInvalid.data.skippedCount === 3)
 
-// Reset DEMO_USER to Free plan for subsequent feature gating tests
-demoUserEarly.plan = 'free'
-await demoUserEarly.save()
 const sortedLeads = await request('GET', '/leads?sortBy=name&sortOrder=asc', { token })
 check('leads sorting by name', sortedLeads.status === 200 && sortedLeads.data.leads.length >= 2)
 
@@ -604,7 +611,7 @@ check('duplicate prevention: re-running scheduler creates no extra notifications
 
 // Test ownership isolation on notifications
 const otherNotifs = await request('GET', '/notifications', { token: otherToken })
-check('ownership isolation: other user cannot see DEMO_USER notifications', otherNotifs.status === 200 && otherNotifs.data.notifications.length === 0)
+check('ownership isolation: other user cannot see DEMO_USER notifications', otherNotifs.status === 200 && !otherNotifs.data.notifications.some((n) => n.id === notifs.data.notifications[0].id))
 
 const targetNotifId = notifs.data.notifications[0].id
 const otherMarkRead = await request('PATCH', `/notifications/${targetNotifId}/read`, { token: otherToken })
@@ -624,6 +631,10 @@ check('unread count is 0 after markAllAsRead', notifsAllRead.status === 200 && n
 const { checkAndResetMonthlyUsage } = await import('../src/services/usageService.js')
 const User = mongoose.model('User')
 
+const demoUserDoc = await User.findOne({ clerkUserId: DEMO_USER })
+demoUserDoc.plan = 'free'
+await demoUserDoc.save()
+
 // Check profile subscription payload shape
 const profSub = await request('GET', '/user/profile', { token })
 check('profile includes subscription details', profSub.status === 200 && profSub.data.subscription?.plan === 'free' && profSub.data.subscription?.maxLeads === 50)
@@ -636,7 +647,6 @@ const importGated = await request('POST', '/leads/import', { token, body: { lead
 check('free user CSV import blocked -> 403', importGated.status === 403 && importGated.data.error.includes('csvImport'))
 
 // AI Usage Limit & Increment for Free user (max 20)
-const demoUserDoc = await User.findOne({ clerkUserId: DEMO_USER })
 demoUserDoc.plan = 'free'
 demoUserDoc.aiUsageCount = 20
 await demoUserDoc.save()
@@ -683,6 +693,78 @@ check('pro user can exceed 50 leads', proLeadCreated.status === 201)
 
 const proExportRes = await request('GET', '/leads/export', { token })
 check('pro user CSV export allowed -> 200', proExportRes.status === 200)
+
+// ---- Agency Cold-Outreach & Workflow (Phase 20) ----
+// 1. Create lead with new agency fields
+const agencyLeadRes = await request('POST', '/leads', {
+  token,
+  body: {
+    name: 'Apollo Bakery',
+    company: 'Apollo Bakers Pvt Ltd',
+    contactPerson: 'Vikram Seth',
+    website: 'https://apollobakers.com',
+    industry: 'Food & Beverage',
+    websiteStatus: 'Redesign Opportunity',
+    outreachChannel: 'Cold Email',
+  },
+})
+check('create lead with agency fields -> 201', agencyLeadRes.status === 201 && agencyLeadRes.data.lead.websiteStatus === 'Redesign Opportunity')
+const agencyLeadId = agencyLeadRes.data.lead.id
+
+// 2. Update outreach status, channel, and follow-up date
+const updateOutreachRes = await request('PATCH', `/leads/${agencyLeadId}`, {
+  token,
+  body: {
+    websiteStatus: 'Outdated Website',
+    outreachChannel: 'WhatsApp',
+    lastContactedAt: new Date().toISOString(),
+    nextFollowUpAt: new Date().toISOString(),
+  },
+})
+check('update agency fields & record activities -> 200', updateOutreachRes.status === 200 && updateOutreachRes.data.lead.websiteStatus === 'Outdated Website' && updateOutreachRes.data.lead.outreachChannel === 'WhatsApp')
+
+// 3. Verify activity timeline records outreach changes
+const agencyActivities = await request('GET', `/leads/${agencyLeadId}/activities`, { token })
+check('outreach activity events recorded', agencyActivities.status === 200 && agencyActivities.data.activities.some((a) => a.type === 'website_status_changed' || a.type === 'outreach_channel_changed'))
+
+// 4. Test agency outreach filters (websiteStatus, outreachChannel, industry)
+const filterWebRes = await request('GET', '/leads?websiteStatus=Outdated%20Website', { token })
+check('filter leads by websiteStatus', filterWebRes.status === 200 && filterWebRes.data.leads.some((l) => l.id === agencyLeadId))
+
+const filterChanRes = await request('GET', '/leads?outreachChannel=WhatsApp', { token })
+check('filter leads by outreachChannel', filterChanRes.status === 200 && filterChanRes.data.leads.some((l) => l.id === agencyLeadId))
+
+// 5. Test dashboard outreach summary payload
+const dashOutreach = await request('GET', '/dashboard', { token })
+check('dashboard contains outreachSummary stats', dashOutreach.status === 200 && typeof dashOutreach.data.outreachSummary?.totalProspects === 'number')
+
+// 6. Test CSV Import with new agency fields & backward compatibility with old CSV format
+const agencyCsvImport = await request('POST', '/leads/import', {
+  token,
+  body: {
+    leads: [
+      {
+        name: 'Legacy Lead Old CSV',
+        company: 'Old Corp',
+        // missing agency fields (backward compatibility check)
+      },
+      {
+        name: 'New Agency Prospect',
+        company: 'Agency Client Co',
+        contactPerson: 'Siddharth Roy',
+        website: 'https://agencyclient.io',
+        industry: 'SaaS',
+        websiteStatus: 'No Website',
+        outreachChannel: 'Cold Email',
+      },
+    ],
+  },
+})
+check('agency CSV import backward compatible -> 200', agencyCsvImport.status === 200 && agencyCsvImport.data.importedCount === 2)
+
+// 7. Verify ownership isolation on agency fields & outreach filters
+const otherUserOutreachFilter = await request('GET', '/leads?websiteStatus=Outdated%20Website', { token: otherToken })
+check('ownership isolation: other user cannot see demo user agency leads', otherUserOutreachFilter.status === 200 && !otherUserOutreachFilter.data.leads.some((l) => l.id === agencyLeadId))
 
 // ---- Public routes ----
 const health = await request('GET', '/health')

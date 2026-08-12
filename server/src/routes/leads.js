@@ -10,7 +10,7 @@ import {
   updateLead,
 } from '../controllers/leads.js'
 import { requireAuth } from '../middleware/auth.js'
-import { LEAD_STATUSES } from '../models/Lead.js'
+import { LEAD_STATUSES, OUTREACH_CHANNELS, WEBSITE_STATUSES } from '../models/Lead.js'
 import { EMAIL_PATTERN, trimFields, validateBody } from '../utils/validate.js'
 
 const router = Router()
@@ -28,6 +28,13 @@ const updateSchema = {
   timeline: { max: 100 },
   status: { enum: LEAD_STATUSES, trim: true },
   notes: { max: 5000 },
+  contactPerson: { max: 200 },
+  website: { max: 500 },
+  industry: { max: 100 },
+  websiteStatus: { enum: WEBSITE_STATUSES, trim: true },
+  outreachChannel: { enum: OUTREACH_CHANNELS, trim: true },
+  lastContactedAt: { type: 'isoDate' },
+  nextFollowUpAt: { type: 'isoDate' },
 }
 
 const createSchema = {

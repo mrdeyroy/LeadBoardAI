@@ -68,6 +68,14 @@ export const getDashboard = asyncHandler(async (req, res) => {
       qualified: byStatus.Qualified,
       won: byStatus.Won,
     },
+    outreachSummary: {
+      totalProspects: total,
+      contacted: byStatus.Contacted,
+      replied: byStatus.Qualified,
+      meetings: byStatus.Qualified,
+      proposals: byStatus.Proposal,
+      won: byStatus.Won,
+    },
     statusCounts: LEAD_STATUSES.map((status) => ({
       status,
       count: byStatus[status],

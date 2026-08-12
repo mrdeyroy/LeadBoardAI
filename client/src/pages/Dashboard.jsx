@@ -7,6 +7,7 @@ import {
   Inbox,
   PieChart,
   RefreshCw,
+  Send,
   Sparkles,
   Trophy,
   Users,
@@ -203,7 +204,53 @@ export default function Dashboard() {
               </CardContent>
             </Card>
           ) : (
-            <>
+              {/* Compact Agency Outreach Summary */}
+              <Card>
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Send className="size-4 text-primary" /> Outreach Conversion Summary
+                    </CardTitle>
+                    <Link to="/outreach" className="text-xs text-muted-foreground hover:text-foreground">
+                      Open Outreach Workspace →
+                    </Link>
+                  </div>
+                  <CardDescription>Cold-prospecting funnel from initial contact to won deals</CardDescription>
+                </CardHeader>
+                <CardContent className="pt-2">
+                  {loading ? (
+                    <Skeleton className="h-16 w-full" />
+                  ) : (
+                    <div className="grid grid-cols-2 gap-3 sm:grid-cols-6 text-center">
+                      <div className="rounded-lg border bg-muted/20 p-2.5">
+                        <p className="text-[11px] font-medium text-muted-foreground">Total Prospects</p>
+                        <p className="text-lg font-bold text-foreground">{data?.outreachSummary?.totalProspects ?? 0}</p>
+                      </div>
+                      <div className="rounded-lg border bg-muted/20 p-2.5">
+                        <p className="text-[11px] font-medium text-muted-foreground">Contacted</p>
+                        <p className="text-lg font-bold text-violet-600 dark:text-violet-400">{data?.outreachSummary?.contacted ?? 0}</p>
+                      </div>
+                      <div className="rounded-lg border bg-muted/20 p-2.5">
+                        <p className="text-[11px] font-medium text-muted-foreground">Replied</p>
+                        <p className="text-lg font-bold text-cyan-600 dark:text-cyan-400">{data?.outreachSummary?.replied ?? 0}</p>
+                      </div>
+                      <div className="rounded-lg border bg-muted/20 p-2.5">
+                        <p className="text-[11px] font-medium text-muted-foreground">Meetings</p>
+                        <p className="text-lg font-bold text-blue-600 dark:text-blue-400">{data?.outreachSummary?.meetings ?? 0}</p>
+                      </div>
+                      <div className="rounded-lg border bg-muted/20 p-2.5">
+                        <p className="text-[11px] font-medium text-muted-foreground">Proposals</p>
+                        <p className="text-lg font-bold text-amber-600 dark:text-amber-400">{data?.outreachSummary?.proposals ?? 0}</p>
+                      </div>
+                      <div className="rounded-lg border bg-muted/20 p-2.5">
+                        <p className="text-[11px] font-medium text-muted-foreground">Won</p>
+                        <p className="text-lg font-bold text-emerald-600 dark:text-emerald-400">{data?.outreachSummary?.won ?? 0}</p>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
               <div className="grid gap-4 lg:grid-cols-2">
                 <ConversionChartCard data={data?.statusCounts ?? []} loading={loading} />
                 <SourceAnalyticsCard data={data?.sourceCounts ?? []} loading={loading} />

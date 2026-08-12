@@ -9,6 +9,22 @@ export const LEAD_STATUSES = [
   'Lost',
 ]
 
+export const WEBSITE_STATUSES = [
+  'No Website',
+  'Outdated Website',
+  'Good Website',
+  'Redesign Opportunity',
+]
+
+export const OUTREACH_CHANNELS = [
+  'Cold Email',
+  'Phone',
+  'WhatsApp',
+  'Instagram',
+  'Referral',
+  'Other',
+]
+
 export const LEAD_UPDATE_FIELDS = [
   'name',
   'company',
@@ -20,6 +36,13 @@ export const LEAD_UPDATE_FIELDS = [
   'timeline',
   'status',
   'notes',
+  'contactPerson',
+  'website',
+  'industry',
+  'websiteStatus',
+  'outreachChannel',
+  'lastContactedAt',
+  'nextFollowUpAt',
 ]
 
 const leadSchema = new mongoose.Schema(
@@ -40,6 +63,13 @@ const leadSchema = new mongoose.Schema(
     timeline: { type: String, trim: true, maxlength: 100, default: '' },
     status: { type: String, enum: LEAD_STATUSES, default: 'New', index: true },
     notes: { type: String, trim: true, maxlength: 5000, default: '' },
+    contactPerson: { type: String, trim: true, maxlength: 200, default: '' },
+    website: { type: String, trim: true, maxlength: 500, default: '' },
+    industry: { type: String, trim: true, maxlength: 100, default: '' },
+    websiteStatus: { type: String, enum: WEBSITE_STATUSES, default: 'No Website', index: true },
+    outreachChannel: { type: String, enum: OUTREACH_CHANNELS, default: 'Cold Email', index: true },
+    lastContactedAt: { type: Date, default: null },
+    nextFollowUpAt: { type: Date, default: null },
   },
   { timestamps: true }
 )

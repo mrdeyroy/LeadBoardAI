@@ -63,7 +63,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { useAsync } from '@/hooks/useAsync'
 import { api } from '@/lib/api'
 import { formatDate } from '@/lib/format'
-import { LEAD_STATUSES } from '@/lib/leads'
+import { LEAD_STATUSES, OUTREACH_CHANNELS, WEBSITE_STATUSES } from '@/lib/leads'
 
 function InfoRow({ icon: Icon, label, value }) {
   return (
@@ -406,12 +406,115 @@ export default function LeadDetails() {
 
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Lead Overview</CardTitle>
+              <CardTitle className="text-base">Outreach Management</CardTitle>
+              <CardDescription>Update agency cold-outreach status and follow-ups</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-3.5">
+              <div className="flex flex-col gap-1">
+                <Label className="text-[11px] font-medium text-muted-foreground uppercase">Website Status Audit</Label>
+                <Select
+                  value={lead.websiteStatus || 'No Website'}
+                  onValueChange={(val) =>
+                    api(`/leads/${lead.id}`, { method: 'PATCH', body: { websiteStatus: val } })
+                      .then(() => {
+                        toast.success('Website status updated')
+                        reloadAll()
+                      })
+                      .catch((err) => toast.error(err.message))
+                  }
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {WEBSITE_STATUSES.map((ws) => (
+                      <SelectItem key={ws} value={ws}>
+                        {ws}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <Label className="text-[11px] font-medium text-muted-foreground uppercase">Outreach Channel</Label>
+                <Select
+                  value={lead.outreachChannel || 'Cold Email'}
+                  onValueChange={(val) =>
+                    api(`/leads/${lead.id}`, { method: 'PATCH', body: { outreachChannel: val } })
+                      .then(() => {
+                        toast.success('Outreach channel updated')
+                        reloadAll()
+                      })
+                      .catch((err) => toast.error(err.message))
+                  }
+                >
+                  <SelectTrigger className="h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {OUTREACH_CHANNELS.map((oc) => (
+                      <SelectItem key={oc} value={oc}>
+                        {oc}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <Label className="text-[11px] font-medium text-muted-foreground uppercase">Last Contacted Date</Label>
+                <Input
+                  type="date"
+                  className="h-8 text-xs"
+                  value={lead.lastContactedAt ? new Date(lead.lastContactedAt).toISOString().split('T')[0] : ''}
+                  onChange={(e) =>
+                    api(`/leads/${lead.id}`, {
+                      method: 'PATCH',
+                      body: { lastContactedAt: e.target.value ? new Date(e.target.value).toISOString() : null },
+                    })
+                      .then(() => {
+                        toast.success('Last contacted date updated')
+                        reloadAll()
+                      })
+                      .catch((err) => toast.error(err.message))
+                  }
+                />
+              </div>
+
+              <div className="flex flex-col gap-1">
+                <Label className="text-[11px] font-medium text-muted-foreground uppercase">Next Follow-Up Date</Label>
+                <Input
+                  type="date"
+                  className="h-8 text-xs"
+                  value={lead.nextFollowUpAt ? new Date(lead.nextFollowUpAt).toISOString().split('T')[0] : ''}
+                  onChange={(e) =>
+                    api(`/leads/${lead.id}`, {
+                      method: 'PATCH',
+                      body: { nextFollowUpAt: e.target.value ? new Date(e.target.value).toISOString() : null },
+                    })
+                      .then(() => {
+                        toast.success('Next follow-up date updated')
+                        reloadAll()
+                      })
+                      .catch((err) => toast.error(err.message))
+                  }
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Lead & Prospect Overview</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3.5">
+              <InfoRow icon={Building2} label="Company / Business Name" value={lead.company} />
+              <InfoRow icon={Pencil} label="Contact Person" value={lead.contactPerson} />
               <InfoRow icon={Mail} label="Email Address" value={lead.email} />
               <InfoRow icon={Phone} label="Phone Number" value={lead.phone} />
-              <InfoRow icon={Building2} label="Company" value={lead.company} />
+              <InfoRow icon={Globe} label="Website URL" value={lead.website} />
+              <InfoRow icon={Building2} label="Industry / Niche" value={lead.industry} />
               <InfoRow icon={Globe} label="Lead Source" value={lead.source} />
               <InfoRow icon={DollarSign} label="Estimated Budget" value={lead.budget} />
               <InfoRow icon={Calendar} label="Target Timeline" value={lead.timeline} />

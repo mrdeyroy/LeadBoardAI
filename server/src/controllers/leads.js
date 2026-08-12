@@ -1,4 +1,9 @@
-import Lead, { LEAD_STATUSES, LEAD_UPDATE_FIELDS } from '../models/Lead.js'
+import Lead, {
+  LEAD_STATUSES,
+  LEAD_UPDATE_FIELDS,
+  OUTREACH_CHANNELS,
+  WEBSITE_STATUSES,
+} from '../models/Lead.js'
 import FollowUp from '../models/FollowUp.js'
 import {
   deleteLeadActivity,
@@ -16,10 +21,29 @@ const parsePositiveInt = (value, fallback, max) => {
   return Math.min(parsed, max)
 }
 
-const ALLOWED_SORT_FIELDS = ['createdAt', 'name', 'company', 'status', 'budget', 'source']
+const ALLOWED_SORT_FIELDS = [
+  'createdAt',
+  'name',
+  'company',
+  'status',
+  'budget',
+  'source',
+  'lastContactedAt',
+  'nextFollowUpAt',
+]
 
 export const listLeads = asyncHandler(async (req, res) => {
-  const { search, status, source, sortBy = 'createdAt', sortOrder = 'desc' } = req.query
+  const {
+    search,
+    status,
+    source,
+    websiteStatus,
+    outreachChannel,
+    industry,
+    nextFollowUp,
+    sortBy = 'createdAt',
+    sortOrder = 'desc',
+  } = req.query
   const page = parsePositiveInt(req.query.page, 1, 1_000_000)
   const limit = parsePositiveInt(req.query.limit, 20, 100)
 
@@ -33,6 +57,9 @@ export const listLeads = asyncHandler(async (req, res) => {
       { email: pattern },
       { phone: pattern },
       { source: pattern },
+      { contactPerson: pattern },
+      { website: pattern },
+      { industry: pattern },
     ]
   }
 
@@ -40,8 +67,34 @@ export const listLeads = asyncHandler(async (req, res) => {
     filter.status = status
   }
 
+  if (websiteStatus && WEBSITE_STATUSES.includes(websiteStatus)) {
+    filter.websiteStatus = websiteStatus
+  }
+
+  if (outreachChannel && OUTREACH_CHANNELS.includes(outreachChannel)) {
+    filter.outreachChannel = outreachChannel
+  }
+
+  if (industry && typeof industry === 'string' && industry.trim()) {
+    filter.industry = new RegExp(escapeRegExp(industry.trim()), 'i')
+  }
+
   if (source && typeof source === 'string' && source.trim()) {
     filter.source = new RegExp(escapeRegExp(source.trim()), 'i')
+  }
+
+  if (nextFollowUp) {
+    const now = new Date()
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+    const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999)
+
+    if (nextFollowUp === 'today') {
+      filter.nextFollowUpAt = { $gte: startOfToday, $lte: endOfToday }
+    } else if (nextFollowUp === 'overdue') {
+      filter.nextFollowUpAt = { $lt: startOfToday }
+    } else if (nextFollowUp === 'pending') {
+      filter.nextFollowUpAt = { $ne: null }
+    }
   }
 
   const sortField = ALLOWED_SORT_FIELDS.includes(sortBy) ? sortBy : 'createdAt'
@@ -98,8 +151,16 @@ export const updateLead = asyncHandler(async (req, res) => {
 
   const oldStatus = lead.status
   const oldNotes = lead.notes
+  const oldWebStatus = lead.websiteStatus
+  const oldChannel = lead.outreachChannel
+  const oldNextFollowUp = lead.nextFollowUpAt ? lead.nextFollowUpAt.toISOString() : null
+
   const changedStatus = oldStatus !== req.body.status && req.body.status !== undefined
   const changedNotes = oldNotes !== req.body.notes && req.body.notes !== undefined
+  const changedWebStatus = oldWebStatus !== req.body.websiteStatus && req.body.websiteStatus !== undefined
+  const changedChannel = oldChannel !== req.body.outreachChannel && req.body.outreachChannel !== undefined
+  const newNextFollowUpStr = req.body.nextFollowUpAt ? new Date(req.body.nextFollowUpAt).toISOString() : null
+  const changedNextFollowUp = oldNextFollowUp !== newNextFollowUpStr && req.body.nextFollowUpAt !== undefined
 
   for (const field of LEAD_UPDATE_FIELDS) {
     if (req.body[field] !== undefined) {
@@ -116,6 +177,36 @@ export const updateLead = asyncHandler(async (req, res) => {
       type: 'status_changed',
       message: `Status changed ${oldStatus} → ${lead.status}`,
       metadata: { from: oldStatus, to: lead.status },
+    })
+  }
+
+  if (changedWebStatus) {
+    await recordActivity({
+      userId: req.user.id,
+      leadId: lead._id,
+      type: 'website_status_changed',
+      message: `Website status updated ${oldWebStatus} → ${lead.websiteStatus}`,
+      metadata: { from: oldWebStatus, to: lead.websiteStatus },
+    })
+  }
+
+  if (changedChannel) {
+    await recordActivity({
+      userId: req.user.id,
+      leadId: lead._id,
+      type: 'outreach_channel_changed',
+      message: `Outreach channel updated ${oldChannel} → ${lead.outreachChannel}`,
+      metadata: { from: oldChannel, to: lead.outreachChannel },
+    })
+  }
+
+  if (changedNextFollowUp) {
+    await recordActivity({
+      userId: req.user.id,
+      leadId: lead._id,
+      type: 'next_followup_updated',
+      message: `Next outreach follow-up set to ${lead.nextFollowUpAt ? new Date(lead.nextFollowUpAt).toLocaleDateString() : 'None'}`,
+      metadata: { nextFollowUpAt: lead.nextFollowUpAt },
     })
   }
 
@@ -161,13 +252,20 @@ export const exportLeads = asyncHandler(async (req, res) => {
   const headers = [
     'Name',
     'Company',
+    'Contact Person',
     'Email',
     'Phone',
+    'Website',
+    'Website Status',
+    'Industry',
+    'Outreach Channel',
     'Source',
     'Status',
     'Budget',
     'Requirement',
     'Timeline',
+    'Last Contacted At',
+    'Next Follow-Up At',
     'Notes',
     'Created At',
   ]
@@ -175,13 +273,20 @@ export const exportLeads = asyncHandler(async (req, res) => {
   const rows = leads.map((l) => [
     escapeCsvCell(l.name),
     escapeCsvCell(l.company),
+    escapeCsvCell(l.contactPerson),
     escapeCsvCell(l.email),
     escapeCsvCell(l.phone),
+    escapeCsvCell(l.website),
+    escapeCsvCell(l.websiteStatus),
+    escapeCsvCell(l.industry),
+    escapeCsvCell(l.outreachChannel),
     escapeCsvCell(l.source),
     escapeCsvCell(l.status),
     escapeCsvCell(l.budget),
     escapeCsvCell(l.requirement),
     escapeCsvCell(l.timeline),
+    escapeCsvCell(l.lastContactedAt ? new Date(l.lastContactedAt).toISOString() : ''),
+    escapeCsvCell(l.nextFollowUpAt ? new Date(l.nextFollowUpAt).toISOString() : ''),
     escapeCsvCell(l.notes),
     escapeCsvCell(l.createdAt ? new Date(l.createdAt).toISOString() : ''),
   ])
@@ -218,17 +323,34 @@ export const importLeads = asyncHandler(async (req, res) => {
         ? item.status.trim()
         : 'New'
 
+    const websiteStatus =
+      typeof item.websiteStatus === 'string' && WEBSITE_STATUSES.includes(item.websiteStatus.trim())
+        ? item.websiteStatus.trim()
+        : 'No Website'
+
+    const outreachChannel =
+      typeof item.outreachChannel === 'string' && OUTREACH_CHANNELS.includes(item.outreachChannel.trim())
+        ? item.outreachChannel.trim()
+        : 'Cold Email'
+
     validLeads.push({
       user: req.user.id,
       name,
       company: typeof item.company === 'string' ? item.company.trim().slice(0, 200) : '',
+      contactPerson: typeof item.contactPerson === 'string' ? item.contactPerson.trim().slice(0, 200) : '',
       email: typeof item.email === 'string' ? item.email.trim().toLowerCase().slice(0, 254) : '',
       phone: typeof item.phone === 'string' ? item.phone.trim().slice(0, 50) : '',
+      website: typeof item.website === 'string' ? item.website.trim().slice(0, 500) : '',
+      industry: typeof item.industry === 'string' ? item.industry.trim().slice(0, 100) : '',
+      websiteStatus,
+      outreachChannel,
       source: typeof item.source === 'string' ? item.source.trim().slice(0, 100) : 'CSV Import',
       requirement: typeof item.requirement === 'string' ? item.requirement.trim().slice(0, 2000) : '',
       budget: typeof item.budget === 'string' ? item.budget.trim().slice(0, 100) : '',
       timeline: typeof item.timeline === 'string' ? item.timeline.trim().slice(0, 100) : '',
       status,
+      lastContactedAt: item.lastContactedAt ? new Date(item.lastContactedAt) : null,
+      nextFollowUpAt: item.nextFollowUpAt ? new Date(item.nextFollowUpAt) : null,
       notes: typeof item.notes === 'string' ? item.notes.trim().slice(0, 5000) : '',
     })
   }
