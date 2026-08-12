@@ -9,10 +9,12 @@ import {
   Download,
   Eye,
   FileSpreadsheet,
+  LayoutGrid,
   MoreHorizontal,
   Pencil,
   Plus,
   Search,
+  TableProperties,
   Trash2,
   Upload,
   Users,
@@ -90,11 +92,26 @@ export default function LeadsPage() {
   const [sortBy, setSortBy] = useState('createdAt')
   const [sortOrder, setSortOrder] = useState('desc')
   const [pageSize, setPageSize] = useState(20)
+  const [viewMode, setViewMode] = useState('table')
   const [page, setPage] = useState(1)
   const [dialog, setDialog] = useState({ open: false, lead: null })
   const [importOpen, setImportOpen] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState(null)
   const [exporting, setExporting] = useState(false)
+
+  const profileQuery = useAsync(() => api('/user/profile'), [])
+
+  useEffect(() => {
+    if (profileQuery.data?.user?.preferences) {
+      const { itemsPerPage, defaultView } = profileQuery.data.user.preferences
+      if (itemsPerPage && [10, 20, 50].includes(itemsPerPage)) {
+        setPageSize(itemsPerPage)
+      }
+      if (defaultView && ['table', 'cards'].includes(defaultView)) {
+        setViewMode(defaultView)
+      }
+    }
+  }, [profileQuery.data])
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -173,7 +190,9 @@ export default function LeadsPage() {
     }
   }
 
-  const totalPages = data?.pagination?.totalPages ?? 0
+  const leadsList = data?.leads ?? []
+  const totalItems = data?.pagination?.total ?? 0
+  const totalPages = data?.pagination?.totalPages ?? 1
 
   const renderSortIcon = (field) => {
     if (sortBy !== field) return <ArrowUpDown className="ml-1 size-3 text-muted-foreground/60" />
@@ -190,8 +209,8 @@ export default function LeadsPage() {
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">Leads Pipeline</h2>
           <p className="text-sm text-muted-foreground">
-            {data && !loading
-              ? `${data.pagination.total} total lead${data.pagination.total === 1 ? '' : 's'} in your workspace`
+            {data?.pagination?.total !== undefined && !loading
+              ? `${totalItems} total lead${totalItems === 1 ? '' : 's'} in your workspace`
               : 'Manage every lead in one place.'}
           </p>
         </div>
@@ -274,6 +293,27 @@ export default function LeadsPage() {
                   ))}
                 </SelectContent>
               </Select>
+
+              <div className="flex items-center gap-1 rounded-md border p-1 bg-muted/20">
+                <Button
+                  variant={viewMode === 'table' ? 'default' : 'ghost'}
+                  size="icon-sm"
+                  onClick={() => setViewMode('table')}
+                  title="Data Table View"
+                  className="size-7 rounded"
+                >
+                  <TableProperties className="size-3.5" />
+                </Button>
+                <Button
+                  variant={viewMode === 'cards' ? 'default' : 'ghost'}
+                  size="icon-sm"
+                  onClick={() => setViewMode('cards')}
+                  title="Card Grid View"
+                  className="size-7 rounded"
+                >
+                  <LayoutGrid className="size-3.5" />
+                </Button>
+              </div>
             </div>
           </div>
         </CardHeader>
@@ -288,7 +328,7 @@ export default function LeadsPage() {
               <Skeleton className="h-10 w-full" />
               <Skeleton className="h-10 w-full" />
             </div>
-          ) : data.leads.length === 0 ? (
+          ) : leadsList.length === 0 ? (
             <EmptyState
               icon={Users}
               title={search || status !== 'all' || source !== 'all' ? 'No matching leads' : 'No leads yet'}
@@ -305,6 +345,66 @@ export default function LeadsPage() {
                 ) : undefined
               }
             />
+          ) : viewMode === 'cards' ? (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {leadsList.map((lead) => (
+                <Card
+                  key={lead.id}
+                  className="cursor-pointer hover:border-foreground/40 transition-all flex flex-col justify-between p-4"
+                  onClick={() => navigate(`/leads/${lead.id}`)}
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h3 className="font-semibold text-foreground text-sm">{lead.name}</h3>
+                        {lead.company && <p className="text-xs text-muted-foreground">{lead.company}</p>}
+                      </div>
+                      <StatusBadge status={lead.status} />
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground pt-1">
+                      {lead.source && (
+                        <span className="rounded bg-muted px-2 py-0.5 text-[11px] font-medium">
+                          {lead.source}
+                        </span>
+                      )}
+                      {lead.budget && (
+                        <span className="font-mono text-[11px]">
+                          {lead.budget}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex items-center justify-between border-t pt-2.5 text-xs text-muted-foreground">
+                    <span>{formatDate(lead.createdAt)}</span>
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon-sm">
+                            <MoreHorizontal className="size-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-44">
+                          <DropdownMenuItem asChild>
+                            <Link to={`/leads/${lead.id}`}>
+                              <Eye className="mr-2 size-4" /> View Details
+                            </Link>
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => openEdit(lead)}>
+                            <Pencil className="mr-2 size-4" /> Edit Lead
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem variant="destructive" onClick={() => setDeleteTarget(lead)}>
+                            <Trash2 className="mr-2 size-4" /> Delete Lead
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <Table>
@@ -354,7 +454,7 @@ export default function LeadsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {data.leads.map((lead) => (
+                  {leadsList.map((lead) => (
                     <TableRow
                       key={lead.id}
                       className="cursor-pointer hover:bg-muted/50 transition-colors"
@@ -416,7 +516,7 @@ export default function LeadsPage() {
             </div>
           )}
 
-          {!loading && !error && data?.leads.length > 0 && (
+          {!loading && !error && leadsList.length > 0 && (
             <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between pt-2 border-t">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <span>Rows per page:</span>
@@ -437,7 +537,7 @@ export default function LeadsPage() {
                   </SelectContent>
                 </Select>
                 <span className="ml-2">
-                  Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, data.pagination.total)} of {data.pagination.total}
+                  Showing {(page - 1) * pageSize + 1}–{Math.min(page * pageSize, totalItems)} of {totalItems}
                 </span>
               </div>
 

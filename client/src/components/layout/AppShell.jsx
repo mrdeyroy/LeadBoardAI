@@ -1,8 +1,11 @@
+import { useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { Outlet, useLocation } from 'react-router-dom'
 
 import { SidebarInset, SidebarProvider } from '@/components/ui/sidebar'
 import { Toaster } from '@/components/ui/sonner'
+import { api } from '@/lib/api'
+import { applyTheme } from '@/lib/theme'
 import { AppSidebar } from './AppSidebar'
 import { TopBar } from './TopBar'
 
@@ -21,6 +24,16 @@ function AnimatedOutlet() {
 }
 
 export function AppShell() {
+  useEffect(() => {
+    api('/user/profile')
+      .then((data) => {
+        if (data?.user?.preferences?.theme) {
+          applyTheme(data.user.preferences.theme)
+        }
+      })
+      .catch(() => {})
+  }, [])
+
   return (
     <SidebarProvider>
       <AppSidebar />

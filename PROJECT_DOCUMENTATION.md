@@ -1509,3 +1509,44 @@ Empower agency solo founders and sales reps with AI capabilities tailored for ag
 - Verified `POST /api/ai/prioritize`, `POST /api/ai/fit-analysis`, `POST /api/ai/followup-assistant`, `POST /api/ai/draft-outreach`, and `POST /api/ai/weekly-summary`.
 - Verified ownership isolation across all agency AI endpoints.
 - Verified clean production compilation (`npm run build`).
+
+---
+
+## Phase 23 — SaaS Design Overhaul & Public Landing Page
+
+### Goal
+
+Transform LeadBoard AI into a visually premium SaaS product with a dedicated, high-converting public landing page and a polished, cohesive authenticated application UI inspired by modern SaaS aesthetic standards (e.g., Cal.com, Linear, Vercel).
+
+### Key Architectural & Design Changes
+
+1. **Public Landing Page Route (`/`)**:
+   - Registered `LandingPage.jsx` at root route `/` accessible publicly without authentication.
+   - Preserved all protected app routes (`/dashboard`, `/outreach`, `/leads`, `/leads/:id`, `/follow-ups`, `/settings`) under `<RequireAuth><AppShell /></RequireAuth>`.
+   - Dynamic auth awareness: navbar and hero CTAs dynamically render "Go to Dashboard" when an active Clerk session is detected.
+2. **Landing Page Architecture (`client/src/components/landing/`)**:
+   - `Navbar.jsx`: Sticky glassmorphic header with logo, navigation links, and dynamic CTAs.
+   - `Hero.jsx`: Value headline *"Turn scattered prospects into a sales pipeline that moves"*, subtext, CTAs, and interactive product mockup previewing live KPI tickers, lead rows, AI suggestions, and follow-ups.
+   - `ProblemSection.jsx`: *"Your sales workflow shouldn't live in five different places"* — animated visual transformation from scattered spreadsheets/WhatsApp/notes into LeadBoard.
+   - `ProductStory.jsx`: *"From prospect to closed deal"* — 7-stage interactive workflow (Research → Outreach → Reply → Follow-up → Meeting → Proposal → Won).
+   - `AiSection.jsx`: Action-assisted AI Sales Assistant preview (prompt → prioritize → propose → user confirm → database execution).
+   - `FeaturesSection.jsx`: Multi-column feature showcases for Lead Management, Outreach Workspace, Follow-Up Schedule, AI Analysis, AI Outreach Drafting, AI Prioritization, Analytics, and CSV Import/Export.
+   - `OutreachWorkflowSection.jsx`: Agency prospecting pipeline (CSV → LeadBoard → Today's Outreach → AI Prioritization → Follow-up → Meeting → Won).
+   - `AnalyticsSection.jsx`: Conversion funnel visualization with animated metrics counters.
+   - `UseCasesSection.jsx`: *"Built for teams that sell through relationships"* featuring Digital Agencies, Freelancers, Consultants, Local Businesses, and Sales Teams.
+   - `PricingSection.jsx`: Free ($0/mo) vs Pro ($29/mo) plan cards clearly detailing live vs upcoming features.
+   - `CtaSection.jsx` & `Footer.jsx`: Conversion section + footer with GitHub repository link (`https://github.com/mrdeyroy/LeadBoardAI`), legal, and terms.
+3. **App UI Overhaul**:
+   - Refined `AppSidebar` active navigation pill states, branding, workspace grouping, and logo link to `/`.
+   - Updated `index.html` with complete SEO metadata, OpenGraph tags, theme color, and semantic title.
+   - Refined `index.css` with smooth scrollbar styles, depth utilities (`.glass-panel`, `.hero-gradient-glow`), and subpixel antialiasing.
+4. **CRM Workspace Preferences & Theme Engine**:
+   - Created centralized theme manager (`client/src/lib/theme.js`) applying `light`, `dark`, or `system` mode to `document.documentElement`.
+   - Connected `AppShell.jsx` to load and apply stored user theme preferences on app mount.
+   - Updated `Settings.jsx` to provide instant live theme previewing and persistent database synchronization.
+   - Updated `Leads.jsx` to initialize `pageSize` and `defaultView` from user preferences, adding a Data Table View vs Card Grid View switcher.
+
+### Verification & Test Results
+
+- **Backend Integration Suite**: Executed `npm test` inside `server/` → **150 passed, 0 failed**.
+- **Production Build**: Executed `npm run build` at root → **built in 1.77s with zero errors**.

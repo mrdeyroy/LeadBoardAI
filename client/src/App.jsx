@@ -6,6 +6,7 @@ import { AppShell } from '@/components/layout/AppShell'
 import { GuestOnly, RequireAuth } from '@/components/RouteGuards'
 import { ClerkTokenBridge } from '@/context/ClerkTokenBridge'
 
+const LandingPage = lazy(() => import('@/pages/LandingPage'))
 const Login = lazy(() => import('@/pages/Login'))
 const Register = lazy(() => import('@/pages/Register'))
 const Dashboard = lazy(() => import('@/pages/Dashboard'))
@@ -34,6 +35,7 @@ function App() {
       <ClerkTokenBridge />
       <BrowserRouter>
         <Routes>
+          <Route path="/" element={withSuspense(<LandingPage />)} />
           <Route path="/login">
             <Route index element={<GuestOnly>{withSuspense(<Login />)}</GuestOnly>} />
             <Route path="*" element={<GuestOnly>{withSuspense(<Login />)}</GuestOnly>} />
@@ -43,7 +45,6 @@ function App() {
             <Route path="*" element={<GuestOnly>{withSuspense(<Register />)}</GuestOnly>} />
           </Route>
           <Route element={<RequireAuth><AppShell /></RequireAuth>}>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
             <Route path="/dashboard" element={withSuspense(<Dashboard />)} />
             <Route path="/outreach" element={withSuspense(<Outreach />)} />
             <Route path="/leads" element={withSuspense(<Leads />)} />

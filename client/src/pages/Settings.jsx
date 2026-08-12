@@ -38,6 +38,8 @@ import { api } from '@/lib/api'
 import { formatDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
+import { applyTheme } from '@/lib/theme'
+
 export default function Settings() {
   const { user: clerkUser } = useUser()
   const clerk = useClerk()
@@ -78,6 +80,7 @@ export default function Settings() {
           defaultView: dbUser.preferences.defaultView || 'table',
           theme: dbUser.preferences.theme || 'system',
         })
+        applyTheme(dbUser.preferences.theme || 'system')
       }
     }
   }, [dbUser, clerkUser])
@@ -111,7 +114,8 @@ export default function Settings() {
           theme: prefForm.theme,
         },
       })
-      toast.success('Preferences saved')
+      applyTheme(prefForm.theme)
+      toast.success('Preferences saved & applied successfully')
       profileQuery.reload()
     } catch (err) {
       toast.error(err.message || 'Failed to update preferences')
@@ -456,7 +460,10 @@ export default function Settings() {
                       <Label htmlFor="pref-theme">Appearance Theme Mode</Label>
                       <Select
                         value={prefForm.theme}
-                        onValueChange={(val) => setPrefForm((p) => ({ ...p, theme: val }))}
+                        onValueChange={(val) => {
+                          setPrefForm((p) => ({ ...p, theme: val }))
+                          applyTheme(val)
+                        }}
                       >
                         <SelectTrigger id="pref-theme">
                           <SelectValue />

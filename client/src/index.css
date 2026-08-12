@@ -129,10 +129,43 @@ body {
   * {
     @apply border-border outline-ring/50;
   }
-  body {
-    @apply bg-background text-foreground;
-  }
   html {
-    @apply font-sans;
+    @apply font-sans scroll-smooth;
   }
+  body {
+    @apply bg-background text-foreground antialiased selection:bg-foreground selection:text-background tracking-tight;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight;
+  }
+}
+
+/* Custom subtle scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: oklch(0.8 0 0 / 0.4);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.6 0 0 / 0.6);
+}
+
+/* Glassmorphism & Depth Utilities */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.dark .glass-panel {
+  background: rgba(20, 20, 20, 0.85);
+}
+
+.hero-gradient-glow {
+  background: radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.15) 0%, rgba(0, 0, 0, 0) 70%);
 }
