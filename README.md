@@ -154,38 +154,57 @@ Every AI-driven mutation is logged in the activity timeline with
 `metadata.actor = "ai"`. Without `GEMINI_API_KEY`, AI endpoints return a
 clear `500` while the rest of the API keeps working.
 
-## Deploying
+## Deploying to Production (Vercel + Render + MongoDB Atlas)
 
-- **Client** → Vercel: build command `npm run build`, output `client/dist`,
-  env `VITE_CLERK_PUBLISHABLE_KEY`.
-- **Server** → Render (web service): start command `npm start`, working
-  directory `server/`, set `MONGODB_URI`, `CLIENT_URL`, `CLERK_SECRET_KEY`,
-  `CLERK_PUBLISHABLE_KEY` (and `CLERK_JWT_KEY` to skip network round-trips).
+LeadBoard AI is configured for zero-friction production deployment:
+
+### 1. Database (MongoDB Atlas)
+1. Create a free cluster on [MongoDB Atlas](https://www.mongodb.com/cloud/atlas).
+2. Create a database user and whitelist network access (`0.0.0.0/0` for cloud web services).
+3. Copy your connection string (`mongodb+srv://<user>:<password>@<cluster>.mongodb.net/leadboard`).
+
+### 2. Backend (Render Web Service)
+1. Connect your repository to [Render](https://render.com).
+2. Choose **New Web Service** pointing to the repository, or use `render.yaml` Blueprint.
+3. Settings:
+   - **Root Directory**: `server`
+   - **Build Command**: `npm install`
+   - **Start Command**: `npm start`
+   - **Health Check Path**: `/api/health`
+4. Set Environment Variables:
+   - `NODE_ENV`: `production`
+   - `MONGODB_URI`: `<your-mongodb-atlas-uri>`
+   - `CLIENT_URL`: `https://<your-vercel-app>.vercel.app`
+   - `CLERK_SECRET_KEY`: `<clerk-secret-key-from-dashboard>`
+   - `CLERK_PUBLISHABLE_KEY`: `<clerk-publishable-key-from-dashboard>`
+   - `GEMINI_API_KEY`: `<gemini-api-key-from-google-ai-studio>`
+   - `CLERK_JWT_KEY` *(optional)*: PEM public key for networkless session validation.
+
+### 3. Frontend (Vercel)
+1. Import your project into [Vercel](https://vercel.com).
+2. Settings:
+   - **Root Directory**: `client`
+   - **Build Command**: `npm run build`
+   - **Output Directory**: `dist`
+3. Environment Variables:
+   - `VITE_CLERK_PUBLISHABLE_KEY`: `<clerk-publishable-key-from-dashboard>`
+   - `VITE_API_URL`: `https://<your-render-app>.onrender.com`
+4. Routing: `client/vercel.json` provides automatic SPA path rewrites (`/(.*)` -> `/index.html`).
 
 ## Status
 
 - ✅ **Phase 1** — Monorepo scaffolding
-- ✅ **Phase 2** — Server foundations: models (User, Lead, FollowUp, Activity),
-  error handling, config
-- ✅ **Phase 3** — Authentication: JWT auth (register/login/logout/me),
-  bcrypt, route guards
-- ✅ **Phase 4** — Leads CRUD with search, filter, pagination, validation, and
-  activity logging; dashboard stats endpoint (total/new/qualified/won, status
-  counts, pending follow-ups, recent activity feed)
+- ✅ **Phase 2** — Server foundations: models (User, Lead, FollowUp, Activity), error handling, config
+- ✅ **Phase 3** — Authentication: JWT auth (register/login/logout/me), bcrypt, route guards
+- ✅ **Phase 4** — Leads CRUD with search, filter, pagination, validation, and activity logging; dashboard stats endpoint
 - ✅ **Phase 5** — Follow-up and activity routes
-- ✅ **Phase 6** — Dashboard & polish: stat cards, Recharts status bar chart,
-  empty/loading/error states, sidebar navigation, route transitions
-- ✅ **Phase 7** — AI assistant: Gemini service, prompt builders, the four
-  read-only AI operations (analyze/qualify/timing/reply), AI chat, and a
-  whitelisted mutation-tool registry + executor (confirm-before-execute
-  pattern)
-- ✅ **Phase 8** — Runtime fixes & zero-setup dev: `mongodb-memory-server`
-  fallback, demo seed, 55-assertion smoke suite green
+- ✅ **Phase 6** — Dashboard & polish: stat cards, Recharts status bar chart, empty/loading/error states, sidebar navigation, route transitions
+- ✅ **Phase 7** — AI assistant: Gemini service, prompt builders, four read-only AI operations, AI chat, and whitelisted mutation tool registry + executor
+- ✅ **Phase 8** — Runtime fixes & zero-setup dev: `mongodb-memory-server` fallback, demo seed, 55-assertion smoke suite green
 - ✅ **Phase 9** — Documentation baseline & git history sync
-- ✅ **Phase 10** — Clerk authentication: `@clerk/express` backend sessions,
-  `@clerk/clerk-react` UI, profile sync via Clerk identity, rate limiting for
-  auth + AI, 69-assertion smoke suite green
-
-To try the app: follow the quick-start above, add your Clerk keys, and sign in
-from the login page. To preload demo data (tied to the Clerk demo user):
-`cd server && npm run seed`.
+- ✅ **Phase 10** — Clerk authentication: `@clerk/express` backend sessions, `@clerk/clerk-react` UI, profile sync via Clerk identity, rate limiting, 69-assertion smoke suite green
+- ✅ **Phase 11** — AI UX & Live CRM Context: live CRM state prompts, 3 reply tones, chat history memory, clear action confirmation UI
+- ✅ **Phase 12** — SaaS CRM Polish: table sorting/filtering/search, KPI cards, LeadDetails hero & activity tabs, FollowUps filter tabs & editing
+- ✅ **Phase 13** — Core SaaS Features: User Profile & Preferences, CSV Lead Export/Import, Lead Source Analytics, Audit History
+- ✅ **Phase 14** — Automated Testing & Reliability: 108-assertion offline integration smoke suite green, input validation hardening
+- ✅ **Phase 15** — Production Deployment Readiness: Vercel SPA rewrites (`vercel.json`), Render service spec (`render.yaml`), CORS security, health check `/api/health`, graceful shutdown, production build verified clean
