@@ -16,13 +16,20 @@ export function buildLeadContext(lead, insights = {}) {
     'LEAD DETAILS',
     field('Name', lead.name),
     field('Company', lead.company),
+    field('Contact Person', lead.contactPerson),
     field('Email', lead.email),
     field('Phone', lead.phone),
+    field('Website', lead.website),
+    field('Industry', lead.industry),
+    field('Website Audit Status', lead.websiteStatus),
+    field('Outreach Channel', lead.outreachChannel),
     field('Source', lead.source),
     field('Requirement', lead.requirement),
     field('Budget', lead.budget),
     field('Timeline', lead.timeline),
     `Status: ${lead.status}`,
+    field('Last Contacted', lead.lastContactedAt ? new Date(lead.lastContactedAt).toISOString().split('T')[0] : null),
+    field('Next Scheduled Follow-Up', lead.nextFollowUpAt ? new Date(lead.nextFollowUpAt).toISOString().split('T')[0] : null),
     field('Notes', lead.notes),
     daysSinceCreated !== null ? `Days in CRM: ${daysSinceCreated}` : null,
     field('Lead ID', String(lead._id)),
@@ -99,6 +106,65 @@ Rules:
 - Keep replies short and natural.
 Available tools:
 ${TOOLS.map((t) => `- ${t.name}(${JSON.stringify(t.parameters).slice(0, 200)}): ${t.description}`).join('\n')}`,
+
+  prioritize: `${ASSISTANT_IDENTITY}
+Evaluate the provided list of agency prospects and determine which ones the sales rep should contact today.
+Return ONLY a JSON object with key "prioritizedLeads": an array of objects, ordered from highest to lowest priority:
+[
+  {
+    "leadId": "<id string>",
+    "company": "<company name>",
+    "priority": "High" | "Medium" | "Low",
+    "reason": "<1-2 sentence justification based on website status, follow-up date, or past outreach>",
+    "recommendedAction": "<clear recommended next step>"
+  }
+]
+Focus on prospects with overdue follow-ups, uncontacted leads with outdated websites, or high-value niches. Do not invent facts.`,
+
+  fitAnalysis: `${ASSISTANT_IDENTITY}
+Analyze why this business is a good prospect for our agency's web design, development, or marketing services.
+Return ONLY a JSON object:
+{
+  "fitScore": <integer 0-100>,
+  "fitRating": "High Fit" | "Medium Fit" | "Low Fit",
+  "reasons": ["<reason 1>", "<reason 2>"],
+  "auditOpportunities": ["<website/branding issue 1>", "<opportunity 2>"],
+  "recommendedPitch": "<tailored pitch angle focusing on value proposition>"
+}
+Base your analysis on industry, websiteStatus, requirements, source, outreach history, and notes.`,
+
+  followUpAssistant: `${ASSISTANT_IDENTITY}
+Analyze the sales rep's pending follow-ups and scheduled outreach tasks.
+Return ONLY a JSON object with key "prioritizedFollowUps": an array of objects ordered by urgency:
+[
+  {
+    "leadId": "<id string>",
+    "leadName": "<name/company>",
+    "dueDate": "<date string>",
+    "reason": "<why follow up now>",
+    "suggestedAngle": "<specific follow-up angle or topic to mention>"
+  }
+]`,
+
+  draftOutreach: (type, tone) => `${ASSISTANT_IDENTITY}
+Draft an agency cold outreach message of type "${type}" (first_cold, follow_up, post_call) in a "${tone}" tone.
+Return ONLY a JSON object:
+{
+  "subject": "<compelling email subject line>",
+  "body": "<editable message body text including greeting, value proposition, and single call-to-action>"
+}
+Use the prospect's company name, website status, industry, and notes context. Keep it under 180 words.`,
+
+  weeklySummary: `${ASSISTANT_IDENTITY}
+Analyze the agency's sales performance metrics and activity log for the past week.
+Return ONLY a JSON object:
+{
+  "summary": "<2-3 sentence executive summary of weekly outreach performance>",
+  "leadsNeedingAttention": [
+    { "leadId": "<id>", "name": "<company name>", "reason": "<why attention needed>" }
+  ],
+  "suggestedNextActions": ["<action item 1>", "<action item 2>"]
+}`,
 }
 
 export const TOOL_DECLARATIONS = TOOLS.map((tool) => ({

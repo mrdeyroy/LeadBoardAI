@@ -3,10 +3,15 @@ import { Router } from 'express'
 import {
   analyze,
   chat,
+  draftOutreach,
+  fitAnalysis,
+  followupAssistant,
+  prioritize,
   qualify,
   reply,
   runAction,
   timing,
+  weeklySummary,
 } from '../controllers/ai.js'
 import { requireAuth } from '../middleware/auth.js'
 import { rateLimit } from '../middleware/rateLimit.js'
@@ -36,5 +41,17 @@ router.post(
   chat
 )
 router.post('/actions', runAction)
+router.post('/prioritize', prioritize)
+router.post('/fit-analysis', validateBody({ leadId: leadIdRule }), fitAnalysis)
+router.post('/followup-assistant', followupAssistant)
+router.post(
+  '/draft-outreach',
+  validateBody({
+    leadId: leadIdRule,
+    type: { enum: ['first_cold', 'follow_up', 'post_call'], trim: true },
+  }),
+  draftOutreach
+)
+router.post('/weekly-summary', weeklySummary)
 
 export default router

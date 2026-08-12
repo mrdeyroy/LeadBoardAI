@@ -87,3 +87,41 @@ export const runAction = asyncHandler(async (req, res) => {
   const result = await executeAction({ tool, params, userId: req.user.id })
   res.json(result)
 })
+
+export const prioritize = asyncHandler(async (req, res) => {
+  await checkAIUsage(req.user.id)
+  const result = await aiService.prioritizeLeads(req.user.id)
+  await incrementAIUsage(req.user.id)
+  res.json(result)
+})
+
+export const fitAnalysis = asyncHandler(async (req, res) => {
+  await checkAIUsage(req.user.id)
+  const lead = await findOwnedLead(req.body.leadId, req.user.id)
+  const fit = await aiService.analyzeLeadFit(lead)
+  await incrementAIUsage(req.user.id)
+  res.json({ fit })
+})
+
+export const followupAssistant = asyncHandler(async (req, res) => {
+  await checkAIUsage(req.user.id)
+  const result = await aiService.suggestFollowUpQueue(req.user.id)
+  await incrementAIUsage(req.user.id)
+  res.json(result)
+})
+
+export const draftOutreach = asyncHandler(async (req, res) => {
+  await checkAIUsage(req.user.id)
+  const lead = await findOwnedLead(req.body.leadId, req.user.id)
+  const type = ['first_cold', 'follow_up', 'post_call'].includes(req.body.type) ? req.body.type : 'first_cold'
+  const draft = await aiService.draftOutreach(lead, type, req.body.tone)
+  await incrementAIUsage(req.user.id)
+  res.json(draft)
+})
+
+export const weeklySummary = asyncHandler(async (req, res) => {
+  await checkAIUsage(req.user.id)
+  const summary = await aiService.generateWeeklySummary(req.user.id)
+  await incrementAIUsage(req.user.id)
+  res.json(summary)
+})

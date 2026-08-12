@@ -82,10 +82,48 @@ export default function Outreach() {
   const [fupTitle, setFupTitle] = useState('')
   const [fupSubmitting, setFupSubmitting] = useState(false)
 
-  // AI Modal
+  // AI Modal states
   const [aiModal, setAiModal] = useState({ open: false, lead: null })
   const [aiLoading, setAiLoading] = useState(false)
-  const [aiAnalysis, setAiAnalysis] = useState('')
+  const [aiAnalysis, setAiAnalysis] = useState(null)
+
+  // Agency Workspace AI states
+  const [prioritizeModal, setPrioritizeModal] = useState({ open: false, loading: false, leads: [] })
+  const [followUpAssistantModal, setFollowUpAssistantModal] = useState({ open: false, loading: false, followups: [] })
+  const [weeklySummaryModal, setWeeklySummaryModal] = useState({ open: false, loading: false, summary: null })
+
+  const handlePrioritizeAI = async () => {
+    setPrioritizeModal({ open: true, loading: true, leads: [] })
+    try {
+      const res = await api('/ai/prioritize', { method: 'POST' })
+      setPrioritizeModal({ open: true, loading: false, leads: res.prioritizedLeads || [] })
+    } catch (err) {
+      toast.error(err.message || 'Failed to prioritize leads')
+      setPrioritizeModal({ open: false, loading: false, leads: [] })
+    }
+  }
+
+  const handleFollowUpAssistantAI = async () => {
+    setFollowUpAssistantModal({ open: true, loading: true, followups: [] })
+    try {
+      const res = await api('/ai/followup-assistant', { method: 'POST' })
+      setFollowUpAssistantModal({ open: true, loading: false, followups: res.prioritizedFollowUps || [] })
+    } catch (err) {
+      toast.error(err.message || 'Failed to run follow-up assistant')
+      setFollowUpAssistantModal({ open: false, loading: false, followups: [] })
+    }
+  }
+
+  const handleWeeklySummaryAI = async () => {
+    setWeeklySummaryModal({ open: true, loading: true, summary: null })
+    try {
+      const res = await api('/ai/weekly-summary', { method: 'POST' })
+      setWeeklySummaryModal({ open: true, loading: false, summary: res })
+    } catch (err) {
+      toast.error(err.message || 'Failed to generate weekly summary')
+      setWeeklySummaryModal({ open: false, loading: false, summary: null })
+    }
+  }
 
   const queryParams = useMemo(() => {
     const params = new URLSearchParams({ limit: '200', sortBy: 'updatedAt', sortOrder: 'desc' })
@@ -264,16 +302,27 @@ export default function Outreach() {
   return (
     <div className="flex flex-col gap-6">
       {/* Header */}
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">Outreach Workspace</h2>
           <p className="text-sm text-muted-foreground">
             Daily agency cold-outreach execution, prospecting pipeline, and conversion analytics.
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => { reload(); dashQuery.reload() }} className="w-fit">
-          <RefreshCw className="mr-1.5 size-3.5" /> Refresh
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="outline" size="sm" onClick={handlePrioritizeAI} className="w-fit text-xs">
+            <Sparkles className="mr-1.5 size-3.5 text-violet-500" /> Prioritize Today
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleFollowUpAssistantAI} className="w-fit text-xs">
+            <Clock className="mr-1.5 size-3.5 text-blue-500" /> Follow-Up Assistant
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleWeeklySummaryAI} className="w-fit text-xs">
+            <Calendar className="mr-1.5 size-3.5 text-emerald-500" /> Weekly Summary
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => { reload(); dashQuery.reload() }} className="w-fit text-xs">
+            <RefreshCw className="mr-1.5 size-3.5" /> Refresh
+          </Button>
+        </div>
       </div>
 
       {/* Outreach Analytics Panel */}
@@ -854,6 +903,186 @@ export default function Outreach() {
                 <Link to={`/leads/${aiModal.lead.id}`}>Open Full Lead Assistant →</Link>
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Prioritization Modal */}
+      <Dialog open={prioritizeModal.open} onOpenChange={(open) => setPrioritizeModal((prev) => ({ ...prev, open }))}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="size-4 text-violet-500" /> AI Prospect Prioritization
+            </DialogTitle>
+            <DialogDescription>Which leads should I contact today?</DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-3 py-2 max-h-[60vh] overflow-y-auto">
+            {prioritizeModal.loading ? (
+              <div className="flex flex-col gap-2 py-6 items-center text-muted-foreground">
+                <Loader2 className="size-6 animate-spin text-primary" />
+                <p className="text-xs">Analyzing prospect pipeline and prioritizing targets...</p>
+              </div>
+            ) : prioritizeModal.leads.length === 0 ? (
+              <p className="text-xs text-muted-foreground p-3 text-center">No high-priority leads found for today.</p>
+            ) : (
+              prioritizeModal.leads.map((item, idx) => (
+                <div key={idx} className="flex flex-col gap-1.5 rounded-lg border p-3 bg-muted/20 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-foreground">{item.company || 'Prospect'}</span>
+                    <span className={cn(
+                      'rounded px-2 py-0.5 text-[11px] font-bold',
+                      item.priority === 'High' ? 'bg-rose-500/10 text-rose-600' : item.priority === 'Medium' ? 'bg-amber-500/10 text-amber-600' : 'bg-slate-500/10 text-slate-600'
+                    )}>
+                      {item.priority} Priority
+                    </span>
+                  </div>
+                  <p className="text-muted-foreground">{item.reason}</p>
+                  {item.recommendedAction && (
+                    <div className="flex items-center justify-between border-t pt-2 mt-1">
+                      <span className="text-primary font-medium">Action: {item.recommendedAction}</span>
+                      {item.leadId && (
+                        <Button asChild size="sm" variant="ghost" className="h-6 text-[11px] px-2">
+                          <Link to={`/leads/${item.leadId}`}>Open Lead →</Link>
+                        </Button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setPrioritizeModal({ open: false, loading: false, leads: [] })}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Follow-Up Assistant Modal */}
+      <Dialog open={followUpAssistantModal.open} onOpenChange={(open) => setFollowUpAssistantModal((prev) => ({ ...prev, open }))}>
+        <DialogContent className="sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Clock className="size-4 text-blue-500" /> AI Follow-Up Assistant
+            </DialogTitle>
+            <DialogDescription>Who should I follow up with today?</DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-3 py-2 max-h-[60vh] overflow-y-auto">
+            {followUpAssistantModal.loading ? (
+              <div className="flex flex-col gap-2 py-6 items-center text-muted-foreground">
+                <Loader2 className="size-6 animate-spin text-primary" />
+                <p className="text-xs">Evaluating pending follow-ups and due dates...</p>
+              </div>
+            ) : followUpAssistantModal.followups.length === 0 ? (
+              <p className="text-xs text-muted-foreground p-3 text-center">No pending follow-ups found.</p>
+            ) : (
+              followUpAssistantModal.followups.map((item, idx) => (
+                <div key={idx} className="flex flex-col gap-1.5 rounded-lg border p-3 bg-muted/20 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold text-foreground">{item.leadName || 'Prospect'}</span>
+                    <span className="text-[11px] text-muted-foreground">{item.dueDate ? formatDate(item.dueDate) : 'Due'}</span>
+                  </div>
+                  <p className="text-muted-foreground"><span className="font-semibold text-foreground">Why: </span>{item.reason}</p>
+                  {item.suggestedAngle && (
+                    <div className="rounded border bg-card p-2 text-primary font-medium mt-1">
+                      Angle: {item.suggestedAngle}
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setFollowUpAssistantModal({ open: false, loading: false, followups: [] })}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Weekly Summary Modal */}
+      <Dialog open={weeklySummaryModal.open} onOpenChange={(open) => setWeeklySummaryModal((prev) => ({ ...prev, open }))}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Calendar className="size-4 text-emerald-500" /> AI Weekly Agency Sales Report
+            </DialogTitle>
+            <DialogDescription>Automated performance summary and next steps</DialogDescription>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-4 py-2 max-h-[65vh] overflow-y-auto text-xs">
+            {weeklySummaryModal.loading ? (
+              <div className="flex flex-col gap-2 py-8 items-center text-muted-foreground">
+                <Loader2 className="size-6 animate-spin text-primary" />
+                <p className="text-xs">Analyzing weekly outreach activity and conversion metrics...</p>
+              </div>
+            ) : weeklySummaryModal.summary ? (
+              <>
+                <div className="grid grid-cols-5 gap-2 text-center">
+                  <div className="rounded border p-2 bg-muted/20">
+                    <span className="text-[10px] text-muted-foreground uppercase block">Outreach</span>
+                    <span className="font-bold text-sm text-violet-600">{weeklySummaryModal.summary.outreachCompleted}</span>
+                  </div>
+                  <div className="rounded border p-2 bg-muted/20">
+                    <span className="text-[10px] text-muted-foreground uppercase block">Replies</span>
+                    <span className="font-bold text-sm text-indigo-600">{weeklySummaryModal.summary.replies}</span>
+                  </div>
+                  <div className="rounded border p-2 bg-muted/20">
+                    <span className="text-[10px] text-muted-foreground uppercase block">Meetings</span>
+                    <span className="font-bold text-sm text-teal-600">{weeklySummaryModal.summary.meetings}</span>
+                  </div>
+                  <div className="rounded border p-2 bg-muted/20">
+                    <span className="text-[10px] text-muted-foreground uppercase block">Proposals</span>
+                    <span className="font-bold text-sm text-amber-600">{weeklySummaryModal.summary.proposals}</span>
+                  </div>
+                  <div className="rounded border p-2 bg-muted/20">
+                    <span className="text-[10px] text-muted-foreground uppercase block">Wins</span>
+                    <span className="font-bold text-sm text-emerald-600">{weeklySummaryModal.summary.wins}</span>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border bg-card p-3">
+                  <span className="font-semibold text-foreground block mb-1">Executive Summary</span>
+                  <p className="text-muted-foreground leading-relaxed">{weeklySummaryModal.summary.summary}</p>
+                </div>
+
+                {weeklySummaryModal.summary.leadsNeedingAttention?.length > 0 && (
+                  <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+                    <span className="font-semibold text-foreground block mb-1">Leads Needing Immediate Attention</span>
+                    <ul className="list-disc pl-4 space-y-1 text-muted-foreground">
+                      {weeklySummaryModal.summary.leadsNeedingAttention.map((item, idx) => (
+                        <li key={idx}>
+                          <span className="font-medium text-foreground">{item.name || 'Prospect'}: </span>
+                          <span>{item.reason}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {weeklySummaryModal.summary.suggestedNextActions?.length > 0 && (
+                  <div className="rounded-lg border bg-primary/5 p-3">
+                    <span className="font-semibold text-primary block mb-1">Suggested Actions for Next Week</span>
+                    <ul className="list-disc pl-4 space-y-1 text-foreground">
+                      {weeklySummaryModal.summary.suggestedNextActions.map((act, idx) => (
+                        <li key={idx}>{act}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </>
+            ) : null}
+          </div>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setWeeklySummaryModal({ open: false, loading: false, summary: null })}>
+              Close
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

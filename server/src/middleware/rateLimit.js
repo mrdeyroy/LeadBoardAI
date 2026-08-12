@@ -5,9 +5,13 @@ import { ApiError } from '../utils/ApiError.js'
  * Intentionally dependency-free: good enough for basic abuse protection on
  * AI / auth endpoints without introducing infrastructure.
  */
-export function rateLimit({ windowMs = 60_000, max = 30, name = 'rate' } = {}) {
-  const hits = new Map()
+const hits = new Map()
 
+export function clearRateLimitHits() {
+  hits.clear()
+}
+
+export function rateLimit({ windowMs = 60_000, max = 30, name = 'rate' } = {}) {
   const cleanup = setInterval(() => {
     const now = Date.now()
     for (const [key, entry] of hits) {

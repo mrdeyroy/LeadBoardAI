@@ -219,12 +219,75 @@ function ChatBubble({ message }) {
   )
 }
 
+function FitView({ fit }) {
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border bg-muted/40 p-3 text-xs">
+      <div className="flex items-center justify-between">
+        <span className="font-semibold text-muted-foreground uppercase">Agency Prospect Fit</span>
+        <Badge variant="outline" className="bg-primary/10 text-primary font-bold">
+          {fit.fitRating} ({fit.fitScore}/100)
+        </Badge>
+      </div>
+      {fit.reasons?.length > 0 && (
+        <div>
+          <span className="font-semibold block text-foreground mb-1">Key Fit Drivers</span>
+          <ul className="list-disc pl-4 space-y-0.5 text-muted-foreground">
+            {fit.reasons.map((r, i) => (
+              <li key={i}>{r}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {fit.auditOpportunities?.length > 0 && (
+        <div>
+          <span className="font-semibold block text-foreground mb-1">Audit Opportunities</span>
+          <ul className="list-disc pl-4 space-y-0.5 text-muted-foreground">
+            {fit.auditOpportunities.map((o, i) => (
+              <li key={i}>{o}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {fit.recommendedPitch && (
+        <div className="rounded border bg-card p-2">
+          <span className="font-semibold text-primary block mb-0.5">Recommended Pitch:</span>
+          <span className="text-foreground">{fit.recommendedPitch}</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function DraftOutreachView({ draft, onCopy }) {
+  const [subject, setSubject] = useState(draft.subject || '')
+  const [body, setBody] = useState(draft.body || '')
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border bg-muted/40 p-3 text-xs">
+      <div className="flex items-center justify-between">
+        <span className="font-semibold text-muted-foreground uppercase">Editable Outreach Draft</span>
+        <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => onCopy(`${subject}\n\n${body}`)}>
+          <Copy className="mr-1 size-3" /> Copy
+        </Button>
+      </div>
+      <div>
+        <label className="text-[11px] font-medium text-muted-foreground block mb-1">Subject</label>
+        <Input value={subject} onChange={(e) => setSubject(e.target.value)} className="h-7 text-xs bg-background" />
+      </div>
+      <div>
+        <label className="text-[11px] font-medium text-muted-foreground block mb-1">Body</label>
+        <Textarea value={body} onChange={(e) => setBody(e.target.value)} rows={6} className="text-xs bg-background resize-none" />
+      </div>
+    </div>
+  )
+}
+
 export function AIPanel({ leadId, leadName, leadStatus, onChanged }) {
   const idRef = useRef(0)
   const [busy, setBusy] = useState(null)
   const [error, setError] = useState('')
   const [result, setResult] = useState(null)
   const [tone, setTone] = useState('professional')
+  const [outreachType, setOutreachType] = useState('first_cold')
   const [proposals, setProposals] = useState([])
   const [messages, setMessages] = useState([])
   const [input, setInput] = useState('')
@@ -242,6 +305,10 @@ export function AIPanel({ leadId, leadName, leadStatus, onChanged }) {
         setResult({ type, data: data.analysis })
       } else if (type === 'reply') {
         setResult({ type, data: data.reply })
+      } else if (type === 'fit') {
+        setResult({ type, data: data.fit })
+      } else if (type === 'draft') {
+        setResult({ type, data })
       } else {
         const rec = data.recommendation
         if (type === 'qualify' && rec.status !== leadStatus) {
@@ -352,7 +419,7 @@ export function AIPanel({ leadId, leadName, leadStatus, onChanged }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
           <Sparkles className="size-4 text-primary" />
-          AI Assistant
+          AI Agency Sales Assistant
         </CardTitle>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
@@ -364,18 +431,20 @@ export function AIPanel({ leadId, leadName, leadStatus, onChanged }) {
             onClick={() => run('analyze', () => api('/ai/analyze', { method: 'POST', body: { leadId } }))}
           />
           <ActionButton
-            icon={MessageSquareText}
-            label="Draft reply"
-            busy={busy === 'reply'}
-            onClick={() =>
-              run('reply', () => api('/ai/reply', { method: 'POST', body: { leadId, tone } }))
-            }
+            icon={Target}
+            label="Lead Fit"
+            busy={busy === 'fit'}
+            onClick={() => run('fit', () => api('/ai/fit-analysis', { method: 'POST', body: { leadId } }))}
           />
           <ActionButton
-            icon={Target}
-            label="Qualify"
-            busy={busy === 'qualify'}
-            onClick={() => run('qualify', () => api('/ai/qualify', { method: 'POST', body: { leadId } }))}
+            icon={MessageSquareText}
+            label="Draft Outreach"
+            busy={busy === 'draft'}
+            onClick={() =>
+              run('draft', () =>
+                api('/ai/draft-outreach', { method: 'POST', body: { leadId, type: outreachType, tone } })
+              )
+            }
           />
           <ActionButton
             icon={CalendarClock}
@@ -385,34 +454,46 @@ export function AIPanel({ leadId, leadName, leadStatus, onChanged }) {
           />
         </div>
 
-        <div className="flex items-center gap-1">
-          <span className="text-xs font-medium text-muted-foreground">Reply tone:</span>
-          {TONES.map((t) => (
-            <Button
-              key={t.id}
-              variant={tone === t.id ? 'default' : 'ghost'}
-              size="sm"
-              className="h-7 px-2 text-xs"
-              disabled={busy !== null}
-              onClick={() => chooseTone(t.id)}
+        <div className="flex flex-col gap-2 rounded-md border p-2 bg-muted/20">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-medium text-muted-foreground">Outreach Type:</span>
+            <select
+              value={outreachType}
+              onChange={(e) => setOutreachType(e.target.value)}
+              className="h-6 text-[11px] rounded border bg-background px-1.5"
             >
-              {t.label}
-            </Button>
-          ))}
+              <option value="first_cold">First Cold</option>
+              <option value="follow_up">Follow-up</option>
+              <option value="post_call">Post-Call</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <span className="text-[11px] font-medium text-muted-foreground">Tone:</span>
+            {TONES.map((t) => (
+              <Button
+                key={t.id}
+                variant={tone === t.id ? 'default' : 'ghost'}
+                size="sm"
+                className="h-6 px-1.5 text-[11px]"
+                disabled={busy !== null}
+                onClick={() => chooseTone(t.id)}
+              >
+                {t.label}
+              </Button>
+            ))}
+          </div>
         </div>
 
         {error && (
           <p className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
             {error}
-            {error.includes('Gemini API key') && (
-              <span className="block text-muted-foreground">
-                Add GEMINI_API_KEY to server/.env to enable AI features.
-              </span>
-            )}
           </p>
         )}
 
         {result?.type === 'analyze' && <AnalysisView analysis={result.data} />}
+        {result?.type === 'fit' && <FitView fit={result.data} />}
+        {result?.type === 'draft' && <DraftOutreachView draft={result.data} onCopy={copyReply} />}
         {result?.type === 'reply' && <ReplyView reply={result.data} onCopy={copyReply} />}
         {result?.type === 'qualify' && (
           <QualifyView current={leadStatus} recommendation={result.data} />

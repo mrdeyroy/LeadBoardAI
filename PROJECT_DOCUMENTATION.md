@@ -1469,8 +1469,43 @@ Transform the Outreach view into a practical daily sales workspace for agency co
 ### Testing & Verification
 
 - Added Phase 21 integration tests to `server/scripts/smoke.js` (total **144 passed, 0 failed**).
-- Verified status pipeline transitions (`Researched`, `Replied`, `Meeting`).
-- Verified outreach analytics calculations and conversion rate formulas.
-- Verified bulk update operations (`POST /api/leads/bulk-update`).
 - Verified strict ownership isolation on bulk updates (User B cannot update User A's leads -> 404).
+- Verified clean production compilation (`npm run build`).
+
+---
+
+## Phase 22 — Agency AI Sales Assistant Capabilities
+
+### Goal
+
+Empower agency solo founders and sales reps with AI capabilities tailored for agency cold-prospecting workflows, including lead prioritization, prospect fit analysis, follow-up assistance, outreach message drafting, and automated weekly sales performance reports.
+
+### AI Engine & Service Enhancements
+
+1. **Lead Context Enrichment (`server/src/services/prompts.js`)**:
+   - Expanded `buildLeadContext` to feed agency prospect fields (`Contact Person`, `Website`, `Industry`, `Website Audit Status`, `Outreach Channel`, `Last Contacted`, `Next Scheduled Follow-Up`) directly to Gemini AI.
+2. **5 Agency AI Capabilities (`server/src/services/aiService.js`)**:
+   - **`prioritizeLeads(userId)`**: Evaluates user's prospect list and prioritizes targets for today based on audit status, follow-up dates, and activity history (`POST /api/ai/prioritize`).
+   - **`analyzeLeadFit(lead)`**: Analyzes why a business is a target prospect for agency web design/dev services, rating fit (0-100), listing audit opportunities, and recommending a custom pitch angle (`POST /api/ai/fit-analysis`).
+   - **`suggestFollowUpQueue(userId)`**: Examines pending follow-ups & due dates to suggest an ordered follow-up queue with reasons & specific angles (`POST /api/ai/followup-assistant`).
+   - **`draftOutreach(lead, type, tone)`**: Generates editable email/message drafts for 3 agency scenarios: `first_cold`, `follow_up`, and `post_call` (`POST /api/ai/draft-outreach`).
+   - **`generateWeeklySummary(userId)`**: Aggregates 7-day sales metrics (`outreachCompleted`, `replies`, `meetings`, `proposals`, `wins`) and synthesizes an executive summary, leads needing attention, and next week's recommended actions (`POST /api/ai/weekly-summary`).
+3. **Safe Execution Architecture**:
+   - Maintained user-gated confirmation architecture via `POST /api/ai/actions` with whitelisted tools (`createFollowUp`, `updateLeadStatus`, `addLeadNote`).
+   - Strictly prohibited automated email/WhatsApp dispatching — AI actions remain user-gated.
+
+### Frontend Sales Assistant Controls
+
+1. **Lead Details AI Sales Assistant (`client/src/components/ai/AIPanel.jsx`)**:
+   - Added **Lead Fit** and **Draft Outreach** action buttons.
+   - Built `FitView` (fit rating badge, fit drivers, audit opportunities, recommended pitch) and `DraftOutreachView` (editable subject & body textareas with copy button).
+2. **Outreach Workspace AI Suite (`client/src/pages/Outreach.jsx`)**:
+   - Added workspace AI action buttons in the top header: `Prioritize Today`, `Follow-Up Assistant`, and `Weekly Summary`.
+   - Built responsive Dialog components displaying prioritized lead lists, follow-up queues, and executive weekly sales reports with metrics cards.
+
+### Testing & Verification
+
+- Added Phase 22 integration tests to `server/scripts/smoke.js` (total **150 passed, 0 failed**).
+- Verified `POST /api/ai/prioritize`, `POST /api/ai/fit-analysis`, `POST /api/ai/followup-assistant`, `POST /api/ai/draft-outreach`, and `POST /api/ai/weekly-summary`.
+- Verified ownership isolation across all agency AI endpoints.
 - Verified clean production compilation (`npm run build`).

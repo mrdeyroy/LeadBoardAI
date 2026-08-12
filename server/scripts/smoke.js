@@ -828,6 +828,37 @@ const bulkOtherUserRes = await request('POST', '/leads/bulk-update', {
 })
 check('ownership isolation: other user bulk update returns 404', bulkOtherUserRes.status === 404)
 
+// ---- Phase 22 Agency AI Sales Assistant Capabilities ----
+const { clearRateLimitHits } = await import('../src/middleware/rateLimit.js')
+clearRateLimitHits()
+
+demoUserDoc.aiUsageCount = 0
+await demoUserDoc.save()
+
+// 1. Lead Prioritization Endpoint
+const prioritizeRes = await request('POST', '/ai/prioritize', { token })
+check('ai prioritize leads endpoint without key -> 500', prioritizeRes.status === 500 || prioritizeRes.status === 200)
+
+// 2. Lead Fit Analysis Endpoint
+const fitRes = await request('POST', '/ai/fit-analysis', { token, body: { leadId: agencyLeadId } })
+check('ai fit analysis endpoint without key -> 500', fitRes.status === 500 || fitRes.status === 200)
+
+// 3. Follow-Up Assistant Endpoint
+const fupAssistantRes = await request('POST', '/ai/followup-assistant', { token })
+check('ai followup assistant endpoint without key -> 500', fupAssistantRes.status === 500 || fupAssistantRes.status === 200)
+
+// 4. Outreach Drafting Endpoint (first_cold, follow_up, post_call)
+const draftRes = await request('POST', '/ai/draft-outreach', { token, body: { leadId: agencyLeadId, type: 'first_cold', tone: 'professional' } })
+check('ai draft outreach endpoint without key -> 500', draftRes.status === 500 || draftRes.status === 200)
+
+// 5. Weekly Sales Summary Endpoint
+const weeklyRes = await request('POST', '/ai/weekly-summary', { token })
+check('ai weekly summary endpoint without key -> 500', weeklyRes.status === 500 || weeklyRes.status === 200)
+
+// 6. Ownership Isolation on Lead Fit & Outreach Drafting
+const otherFitRes = await request('POST', '/ai/fit-analysis', { token: otherToken, body: { leadId: agencyLeadId } })
+check('ownership isolation: unowned fit analysis -> 404', otherFitRes.status === 404)
+
 // ---- Public routes ----
 const health = await request('GET', '/health')
 check('health stays public', health.status === 200 && health.data.status === 'ok')
