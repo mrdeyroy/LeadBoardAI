@@ -243,15 +243,19 @@ export default function Outreach() {
   const handleAskAI = async (lead) => {
     setAiModal({ open: true, lead })
     setAiLoading(true)
-    setAiAnalysis('')
+    setAiAnalysis(null)
     try {
       const res = await api('/ai/analyze', {
         method: 'POST',
         body: { leadId: lead.id },
       })
-      setAiAnalysis(res.analysis || res.summary || 'AI completed outreach evaluation.')
+      setAiAnalysis(res.analysis || { summary: res.summary || 'AI evaluation completed.' })
     } catch (err) {
-      setAiAnalysis(`AI Suggestion: Evaluate ${lead.company || lead.name}'s website (${lead.website || 'No website'}) and send a tailored cold message highlighting website redesign opportunities.`)
+      setAiAnalysis({
+        summary: `Evaluate ${lead.company || lead.name}'s website (${lead.website || 'No website'}) and send a tailored cold message highlighting website redesign opportunities.`,
+        quality: 'Medium',
+        recommendedNextAction: 'Send personalized cold outreach email proposing audit',
+      })
     } finally {
       setAiLoading(false)
     }
@@ -805,11 +809,40 @@ export default function Outreach() {
                 <Loader2 className="size-6 animate-spin text-primary" />
                 <p className="text-xs">Evaluating prospect website and outreach strategy...</p>
               </div>
-            ) : (
-              <div className="rounded-md border bg-muted/30 p-3 text-xs leading-relaxed whitespace-pre-wrap">
+            ) : typeof aiAnalysis === 'string' ? (
+              <div className="rounded-md border bg-muted/30 p-3 text-xs leading-relaxed">
                 {aiAnalysis}
               </div>
-            )}
+            ) : aiAnalysis ? (
+              <div className="flex flex-col gap-3 rounded-md border bg-muted/20 p-3 text-xs">
+                {aiAnalysis.quality && (
+                  <div className="flex items-center justify-between border-b pb-2">
+                    <span className="text-[11px] font-semibold text-muted-foreground uppercase">Data Quality</span>
+                    <span className="rounded bg-primary/10 px-2 py-0.5 text-[11px] font-semibold text-primary">
+                      {aiAnalysis.quality} Quality
+                    </span>
+                  </div>
+                )}
+                {aiAnalysis.summary && (
+                  <div>
+                    <span className="font-semibold text-foreground block mb-0.5">Summary</span>
+                    <p className="text-muted-foreground leading-relaxed">{aiAnalysis.summary}</p>
+                  </div>
+                )}
+                {aiAnalysis.intent && (
+                  <div>
+                    <span className="font-semibold text-foreground block mb-0.5">Intent</span>
+                    <p className="text-muted-foreground">{aiAnalysis.intent}</p>
+                  </div>
+                )}
+                {aiAnalysis.recommendedNextAction && (
+                  <div className="rounded-md bg-primary/5 p-2.5 border border-primary/20 mt-1">
+                    <span className="font-semibold text-primary block mb-0.5">Recommended Action:</span>
+                    <span className="text-foreground">{aiAnalysis.recommendedNextAction}</span>
+                  </div>
+                )}
+              </div>
+            ) : null}
           </div>
 
           <DialogFooter>
