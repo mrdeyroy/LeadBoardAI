@@ -204,6 +204,7 @@ export default function Dashboard() {
               </CardContent>
             </Card>
           ) : (
+            <>
               {/* Compact Agency Outreach Summary */}
               <Card>
                 <CardHeader className="pb-2">
