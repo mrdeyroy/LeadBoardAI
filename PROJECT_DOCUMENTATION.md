@@ -1594,4 +1594,70 @@ Transform LeadBoard AI into a visually premium SaaS product with a dedicated, hi
 
 ### Testing & Verification
 - **Vite Build**: Compiled client with 0 errors in 1.77s.
-- **Integration suite**: `npm test` inside `server/` → **150 passed, 0 failed**.
+- **Integration suite**: `npm test` inside `server/` → **150 passed, 0 failed**.
+
+---
+
+## Phase 24 — Premium Verified Customer Reviews & Carousel
+
+### Goal
+
+Add a dynamic, accessible, and visually engaging customer reviews section (`TestimonialsSection.jsx`) to the landing page that adheres strictly to a 100% genuine feedback policy—rendering an auto-rotating carousel when verified customer reviews are present, and a graceful, transparent empty state when no verified reviews are available yet.
+
+### Key Features & Architectural Implementation
+
+1. **Strict 100% Verified Review Policy**:
+   - Zero invented testimonials, manufactured names, synthetic ratings, or fake stock photos.
+   - Component defaults to `VERIFIED_REVIEWS = []`.
+   - When empty, it renders an elegant glassmorphic transparency card explaining our verified user feedback commitment, zero fake data guarantee, and founder review submission link.
+2. **Auto-Rotating Testimonial Carousel**:
+   - Auto-rotates active slides every 6 seconds.
+   - Automatically pauses on mouse hover (`onMouseEnter`), touch interaction, or keyboard focus (`onFocus`), resuming when unhovered or blurred.
+   - Includes interactive auto-rotation pause/play toggle indicator.
+3. **Manual Navigation Controls & Pagination**:
+   - Previous (`ChevronLeft`) and Next (`ChevronRight`) action buttons.
+   - Interactive pagination dot indicators with animated active pill expansion.
+   - Direct keyboard arrow navigation support (`ArrowLeft` / `ArrowRight`).
+4. **Framer Motion Directional Animations & Reduced Motion**:
+   - Custom directional slide/fade transitions (`AnimatePresence` with custom `direction`).
+   - Uses `useReducedMotion()` to detect `prefers-reduced-motion` settings. When enabled, translation offsets are set to `0`, switching to simple opacity fades.
+5. **Selective Reviewer Details**:
+   - Reviewer name, role, company, photo/avatar, rating, and verified badge render dynamically only when verified data is available.
+6. **Landing Page Integration & Navigation**:
+   - Integrated into `LandingPage.jsx` at `#reviews` right after `UseCasesSection`.
+   - Updated `Navbar.jsx` (desktop nav & mobile drawer) and `Footer.jsx` to include direct anchor links to `#reviews`.
+
+### Testing & Verification
+
+- **Client Linter**: Executed `npm run lint` in `client/` → **0 errors**.
+- **Production Build**: Executed `npm run build` at root → **built successfully in 13.79s**.
+- **Server Integration Suite**: Executed `npm test` in `server/` → **150 passed, 0 failed**.
+
+---
+
+## Phase 25 — Early Access Pilot Feedback & Dynamic Product Metrics Showcase
+
+### Goal
+
+Enhance the LeadBoard AI landing page with two focused SaaS landing page improvements: (1) direct, out-of-the-box auto-sliding Early Access / Pilot Feedback carousel without requiring hidden preview toggles, and (2) a dynamic, usage-metrics-driven SaaS showcase section featuring animated counters and progress indicators.
+
+### Key Enhancements
+
+1. **Early Access / Pilot Feedback Carousel (`TestimonialsSection.jsx`)**:
+   - Re-labeled section to **"Early Users / Pilot Feedback"** with explicit transparent badges.
+   - Out-of-the-box active auto-sliding carousel displaying early access founder feedback (`PILOT_FEEDBACK_REVIEWS`), directly editable for live production reviews (`REAL_CUSTOMER_REVIEWS`).
+   - Smooth Framer Motion transitions for quote text, reviewer avatar/initials, author name, role, company, star ratings, and impact metric pills.
+   - Responsive mobile controls, previous/next arrow buttons, pagination dots, pause on hover/focus, and prefers-reduced-motion compatibility.
+2. **Dynamic Product & Usage Metrics Section (`MetricsSection.jsx`)**:
+   - High-impact SaaS metrics section (`#metrics`) placed directly after `Hero.jsx`.
+   - Displays 7 core product usage metrics: *Leads Managed*, *Leads Contacted*, *Replies Received*, *Meetings Scheduled*, *Follow-ups Completed*, *AI Actions Executed*, and *Win Conversion Rate*.
+   - Features animated count-up numbers using a dependency-free `requestAnimationFrame` + `useInView` counter.
+   - Includes progress bars, metric trend indicators, and clear demo benchmark disclosures (`[ Demo Benchmark Metrics ]`).
+3. **Landing Page Navigation**:
+   - Updated `Navbar.jsx` (desktop and mobile drawer) with `#metrics` and `#reviews` anchor links.
+
+### Testing & Verification
+
+- **Client Linter (`oxlint`)**: Passed with 0 errors.
+- **Production Build (`npm run build`)**: Built in 9.65s with zero errors.
+- **Integration Suite (`npm test`)**: Passed all 150 assertions cleanly.

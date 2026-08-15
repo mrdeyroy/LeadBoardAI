@@ -6,10 +6,12 @@ import { DEMO_CLERK_USER_ID, seedDemoData } from '../src/seed/demoData.js'
 async function main() {
   await connectDB()
 
-  const counts = await seedDemoData()
+  const seeded = await seedDemoData()
 
-  console.log(`Seeded ${counts.leads} leads, ${counts.followUps} follow-ups, ${counts.activities} activities`)
-  console.log(`Owned by Clerk user ${DEMO_CLERK_USER_ID} — sign in with that Clerk account to see it.`)
+  console.log(`Successfully seeded demo data for ${seeded.length} account(s):`)
+  for (const item of seeded) {
+    console.log(` - Account: ${item.user} (${item.leads} leads, ${item.followUps} follow-ups, ${item.activities} activities)`)
+  }
 
   await mongoose.disconnect()
   if (globalThis.__LEADBOARD_MONGOD) {

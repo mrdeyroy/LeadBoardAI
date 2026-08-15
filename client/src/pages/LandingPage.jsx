@@ -1,6 +1,7 @@
 import { BackgroundPattern } from '@/components/landing/BackgroundPattern'
 import { Navbar } from '@/components/landing/Navbar'
 import { Hero } from '@/components/landing/Hero'
+import { MetricsSection } from '@/components/landing/MetricsSection'
 import { ProblemSection } from '@/components/landing/ProblemSection'
 import { ProductStory } from '@/components/landing/ProductStory'
 import { AiSection } from '@/components/landing/AiSection'
@@ -8,6 +9,7 @@ import { FeaturesSection } from '@/components/landing/FeaturesSection'
 import { OutreachWorkflowSection } from '@/components/landing/OutreachWorkflowSection'
 import { AnalyticsSection } from '@/components/landing/AnalyticsSection'
 import { UseCasesSection } from '@/components/landing/UseCasesSection'
+import { TestimonialsSection } from '@/components/landing/TestimonialsSection'
 import { PricingSection } from '@/components/landing/PricingSection'
 import { CtaSection } from '@/components/landing/CtaSection'
 import { Footer } from '@/components/landing/Footer'
@@ -20,6 +22,7 @@ export default function LandingPage() {
         <Navbar />
         <main>
           <Hero />
+          <MetricsSection />
           <ProblemSection />
           <ProductStory />
           <AiSection />
@@ -27,6 +30,7 @@ export default function LandingPage() {
           <OutreachWorkflowSection />
           <AnalyticsSection />
           <UseCasesSection />
+          <TestimonialsSection />
           <PricingSection />
           <CtaSection />
         </main>

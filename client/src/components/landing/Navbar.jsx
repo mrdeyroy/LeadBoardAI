@@ -26,10 +26,12 @@ export function Navbar() {
 
         {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center gap-6 text-xs font-medium text-muted-foreground">
+          <a href="#metrics" className="transition-colors hover:text-foreground">Metrics</a>
           <a href="#problem" className="transition-colors hover:text-foreground">Why LeadBoard</a>
           <a href="#workflow" className="transition-colors hover:text-foreground">Workflow</a>
           <a href="#ai-assistant" className="transition-colors hover:text-foreground">AI Assistant</a>
           <a href="#features" className="transition-colors hover:text-foreground">Features</a>
+          <a href="#reviews" className="transition-colors hover:text-foreground">Pilot Feedback</a>
           <a href="#pricing" className="transition-colors hover:text-foreground">Pricing</a>
         </nav>
 
@@ -74,6 +76,9 @@ export function Navbar() {
       {mobileOpen && (
         <div className="md:hidden border-b border-border/80 bg-background/95 backdrop-blur-md px-4 pt-3 pb-6 space-y-4 animate-in fade-in slide-in-from-top-2 duration-200">
           <nav className="flex flex-col space-y-3 text-sm font-medium text-muted-foreground pt-1">
+            <a href="#metrics" onClick={closeMenu} className="px-2 py-1.5 rounded-md hover:bg-muted hover:text-foreground transition-colors">
+              Metrics
+            </a>
             <a href="#problem" onClick={closeMenu} className="px-2 py-1.5 rounded-md hover:bg-muted hover:text-foreground transition-colors">
               Why LeadBoard
             </a>
@@ -85,6 +90,9 @@ export function Navbar() {
             </a>
             <a href="#features" onClick={closeMenu} className="px-2 py-1.5 rounded-md hover:bg-muted hover:text-foreground transition-colors">
               Features
+            </a>
+            <a href="#reviews" onClick={closeMenu} className="px-2 py-1.5 rounded-md hover:bg-muted hover:text-foreground transition-colors">
+              Pilot Feedback
             </a>
             <a href="#pricing" onClick={closeMenu} className="px-2 py-1.5 rounded-md hover:bg-muted hover:text-foreground transition-colors">
               Pricing

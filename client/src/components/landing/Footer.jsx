@@ -26,6 +26,7 @@ export function Footer() {
               <li><a href="#features" className="hover:text-foreground transition-colors">Features</a></li>
               <li><a href="#workflow" className="hover:text-foreground transition-colors">7-Stage Workflow</a></li>
               <li><a href="#ai-assistant" className="hover:text-foreground transition-colors">AI Sales Assistant</a></li>
+              <li><a href="#reviews" className="hover:text-foreground transition-colors">Verified Reviews</a></li>
               <li><a href="#pricing" className="hover:text-foreground transition-colors">Pricing Plans</a></li>
             </ul>
           </div>

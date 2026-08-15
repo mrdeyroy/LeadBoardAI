@@ -187,19 +187,62 @@ export async function seedDemoDataForUser(user) {
  * Safe to run repeatedly — existing demo data is replaced.
  */
 export async function seedDemoData() {
-  const existing = await User.findOne({ clerkUserId: DEMO_CLERK_USER_ID })
-  if (existing) {
-    await Activity.deleteMany({ user: existing._id })
-    await FollowUp.deleteMany({ user: existing._id })
-    await Lead.deleteMany({ user: existing._id })
-    await User.deleteOne({ _id: existing._id })
+  const results = []
+
+  // 1. Seed demo user (user_2demoLeadBoardAI)
+  const existingDemo = await User.findOne({ clerkUserId: DEMO_CLERK_USER_ID })
+  if (existingDemo) {
+    await Activity.deleteMany({ user: existingDemo._id })
+    await FollowUp.deleteMany({ user: existingDemo._id })
+    await Lead.deleteMany({ user: existingDemo._id })
+    await User.deleteOne({ _id: existingDemo._id })
   }
 
-  const user = await User.create({
+  const demoUser = await User.create({
     name: DEMO_PROFILE.name,
     email: DEMO_PROFILE.email,
     clerkUserId: DEMO_CLERK_USER_ID,
   })
+  const demoResult = await seedDemoDataForUser(demoUser)
+  results.push({ user: 'demo@leadboard.ai', ...demoResult })
 
-  return seedDemoDataForUser(user)
+  // 2. Find all existing non-demo users in DB (including shibamdeyroy2860) and seed for them
+  const existingUsers = await User.find({ clerkUserId: { $ne: DEMO_CLERK_USER_ID } })
+  for (const user of existingUsers) {
+    await Activity.deleteMany({ user: user._id })
+    await FollowUp.deleteMany({ user: user._id })
+    await Lead.deleteMany({ user: user._id })
+    const res = await seedDemoDataForUser(user)
+    results.push({ user: user.email || user.name || user.clerkUserId, ...res })
+  }
+
+  // 3. If no user matching shibamdeyroy2860 was found in existingUsers, create one and seed it
+  const hasShibamUser = existingUsers.some(
+    (u) =>
+      (u.email && u.email.toLowerCase().includes('shibam')) ||
+      (u.name && u.name.toLowerCase().includes('shibam')) ||
+      (u.clerkUserId && u.clerkUserId.toLowerCase().includes('shibam'))
+  )
+
+  if (!hasShibamUser) {
+    const shibamClerkId = 'user_shibamdeyroy2860'
+    const existingShibam = await User.findOne({ clerkUserId: shibamClerkId })
+    if (existingShibam) {
+      await Activity.deleteMany({ user: existingShibam._id })
+      await FollowUp.deleteMany({ user: existingShibam._id })
+      await Lead.deleteMany({ user: existingShibam._id })
+      const res = await seedDemoDataForUser(existingShibam)
+      results.push({ user: 'shibamdeyroy2860', ...res })
+    } else {
+      const shibamUser = await User.create({
+        name: 'Shibam Dey Roy',
+        email: 'shibamdeyroy2860@gmail.com',
+        clerkUserId: shibamClerkId,
+      })
+      const res = await seedDemoDataForUser(shibamUser)
+      results.push({ user: 'shibamdeyroy2860', ...res })
+    }
+  }
+
+  return results
 }
