@@ -1,5 +1,13 @@
 # LeadBoard AI
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![React](https://img.shields.io/badge/React-19.x-blue.svg?logo=react&logoColor=white)](https://react.dev)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4.x-38bdf8.svg?logo=tailwindcss&logoColor=white)](https://tailwindcss.com)
+[![Clerk Auth](https://img.shields.io/badge/Auth-Clerk-6C47FF.svg?logo=clerk&logoColor=white)](https://clerk.com)
+[![Google Gemini API](https://img.shields.io/badge/AI-Google_Gemini-4285F4.svg?logo=googlegemini&logoColor=white)](https://ai.google.dev/)
+[![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933.svg?logo=node.js&logoColor=white)](https://nodejs.org)
+[![MongoDB](https://img.shields.io/badge/Database-MongoDB-47A248.svg?logo=mongodb&logoColor=white)](https://www.mongodb.com)
+
 A lightweight, high-performance, and AI-assisted CRM designed for solo founders, small sales teams, and digital agencies to streamline lead management, manage follow-ups, track outreach workflows, and automate key sales tasks.
 
 ## Table of Contents
